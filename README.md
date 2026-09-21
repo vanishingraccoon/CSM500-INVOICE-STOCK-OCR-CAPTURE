@@ -1,5 +1,11 @@
 # Invoice Capture and Unit Conversion for POS Stock Entry
 
+**University of London, CSM500**
+
+**Student number:** 230504895
+
+**Module leader:** Harikala Kandel
+
 ## The problem
 
 News Cafe Eastgate receives paper supplier invoices. A manager reads each one and types the lines into Pilot, the stock system. Two things go wrong: transcription errors, and units — the invoice says "2 x 12.5kg bags", while Pilot expects 25 kilograms.

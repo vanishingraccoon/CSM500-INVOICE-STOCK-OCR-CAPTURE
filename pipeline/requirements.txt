@@ -1,0 +1,6 @@
+pymupdf
+pillow
+rapidfuzz
+flask
+openpyxl
+pytest

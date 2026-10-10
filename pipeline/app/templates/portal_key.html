@@ -1,0 +1,100 @@
+{% extends "portal_base.html" %}
+{% block title %}Key: {{ shop.name }}{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Key</h1>
+  <span class="muted">What each shop's lines are matched and converted against: its Pilot stock items, and the supplier wording learned from submitted batches.</span>
+</div>
+
+<nav class="tab-jump">
+  {% for s in shops.values() %}
+    <a class="tag {{ 'tag-accent' if s.shop_id == shop.shop_id else 'tag-outline' }}" href="{{ url_for('portal.key', shop=s.shop_id) }}">{{ s.name }}</a>
+  {% endfor %}
+</nav>
+
+{% if problem %}
+  <div class="warn">{{ problem }}</div>
+{% endif %}
+
+{% if key %}
+<section class="plate">
+  <h2>{{ shop.name }}</h2>
+  <dl class="readout">
+    <div><dt>Stock items</dt><dd>{{ summary["items"] }}</dd></div>
+    {% for status, n in summary.status.items() %}<div><dt>{{ status|replace("_", " ") }}</dt><dd>{{ n }}</dd></div>{% endfor %}
+    <div><dt>Purchase lines</dt><dd>{{ key.purchase_lines }}</dd></div>
+    <div><dt>Aliases in use</dt><dd>{{ key.matcher.aliases|length }}</dd></div>
+  </dl>
+  <p class="muted" style="margin:var(--space-3) 0 0">
+    Stock Valuation: <span class="mono">{{ key.stock_file.name }}</span> ({{ key.stock.as_of or "date not given" }}).
+    {% if key.purchases_file %}Purchasing Report: <span class="mono">{{ key.purchases_file.name }}</span>, used for supplier history and usual prices.
+    {% else %}No Purchasing Report for this shop: lines are matched on wording alone, and prices are checked only against batches already submitted.{% endif %}
+    The latest export in data/pilot is used; drop in a newer one to update the key.
+  </p>
+</section>
+
+<section class="plate">
+  <h2>Search the stock items</h2>
+  <form method="get" action="{{ url_for('portal.key') }}" class="actions-row">
+    <input type="hidden" name="shop" value="{{ shop.shop_id }}">
+    <input class="input" name="q" value="{{ q }}" placeholder="name or code" style="max-width:360px">
+    <button class="btn btn-secondary" type="submit">Search</button>
+  </form>
+  {% if q %}
+    {% if found %}
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>Code</th><th>Name in Pilot</th><th>Base unit</th><th>Category</th></tr></thead>
+      <tbody>{% for i in found %}<tr><td class="mono">{{ i.code }}</td><td>{{ i.name }}</td><td>{{ i.base.unit or "not recognised" }}</td><td>{{ i.category }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    {% else %}<p class="muted">No stock item matches "{{ q }}".</p>{% endif %}
+  {% endif %}
+</section>
+{% endif %}
+
+<section class="plate" id="aliases">
+  <h2>Learned aliases</h2>
+  <p class="muted">Supplier wording tied to a stock item when a batch was submitted. A wording learned for two different items is not used. Removing an alias stops it being used and stops it being learned again; the record stays.</p>
+  {% if aliases %}
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Supplier</th><th>Wording on the invoice</th><th>Stock item</th><th class="num">Learned</th><th>Last learned</th><th></th></tr></thead>
+    <tbody>
+    {% for a in aliases %}
+      <tr>
+        <td>{{ a.supplier }}</td>
+        <td>{{ a.wording }}<br><span class="mono muted">{{ a.normalised }}</span></td>
+        <td>{{ a.item_name }} <span class="mono muted">{{ a.item_code }}</span></td>
+        <td class="num">{{ a.times }}&times; in {{ a.batches }} batch{{ "" if a.batches == 1 else "es" }}</td>
+        <td>{{ a.last_learned|when }}</td>
+        <td>
+          {% if a.removed %}<span class="tag tag-neutral">removed</span>
+          {% else %}
+            {% if a.conflict %}<span class="tag tag-outline">not used: two items</span>{% endif %}
+            <form class="inline" method="post" action="{{ url_for('portal.remove_alias', shop_id=shop.shop_id) }}"
+                  onsubmit="return confirm('Remove this alias? It will not be used or learned again.')">
+              <input type="hidden" name="supplier" value="{{ a.supplier }}">
+              <input type="hidden" name="normalised" value="{{ a.normalised }}">
+              <input type="hidden" name="item_code" value="{{ a.item_code }}">
+              <button class="btn btn-secondary" type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+    <p class="muted">Nothing learned yet for {{ shop.name }}. Aliases are learned when a batch is submitted.</p>
+  {% endif %}
+</section>
+
+{% if key and problems %}
+<section class="plate">
+  <h2>Stock items the key cannot convert</h2>
+  <p class="muted">Their names carry no base unit, or one Pilot's suffix convention does not recognise, so lines matched to them are refused rather than guessed. Items held by pack size (a 750ML bottle counted each) are not listed: they convert when the invoice prints the same size. {{ problems|length }} item{{ "" if problems|length == 1 else "s" }}.</p>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>Code</th><th>Description</th><th>Suffix</th><th>Status</th><th>Category</th></tr></thead>
+    <tbody>{% for e in problems[:400] %}<tr><td class="mono">{{ e.code }}</td><td>{{ e.description }}</td><td>{{ e.base_raw or "(none)" }}</td><td>{{ e.status|replace("_", " ") }}</td><td>{{ e.category }}</td></tr>{% endfor %}</tbody>
+  </table></div>
+</section>
+{% endif %}
+{% endblock %}

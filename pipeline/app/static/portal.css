@@ -1,0 +1,80 @@
+/* The laptop portal, in the Industry design system (industry.css): the same tokens, hairlines and square
+   frames as the phone screens, laid out for a laptop and still usable on a phone. No web font, no CDN. */
+
+:root {
+  --color-bad: #9b1c1c;
+  --color-bad-bg: #fbeceb;
+  --color-bad-line: color-mix(in srgb, #9b1c1c 45%, transparent);
+}
+
+body.portal { min-height: 100vh; }
+.portal-nav {
+  position: sticky; top: 0; z-index: 10; flex-wrap: wrap; row-gap: var(--space-2);
+  background: var(--color-bg); border-bottom: 1px solid var(--color-divider);
+}
+.portal-nav a { padding: var(--space-2) 0; }
+.portal-main {
+  max-width: 1280px; margin: 0 auto; padding: var(--space-6) var(--space-4) 64px;
+  display: flex; flex-direction: column; gap: var(--space-6);
+}
+.page-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-3) var(--space-4); }
+.page-head h1 { font-size: 32px; margin: 0; }
+h2 { font-size: 22px; margin: 0 0 var(--space-3); }
+h3 { font-size: 18px; margin: 0 0 var(--space-1); }
+.muted { color: color-mix(in srgb, var(--color-text) 60%, transparent); }
+.mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.bad { color: var(--color-bad); }
+
+.plate { position: relative; border: 1px solid var(--color-divider); padding: var(--space-4); }
+.warn { border: 1px solid var(--color-bad-line); border-left: 4px solid var(--color-bad); background: var(--color-bad-bg);
+        padding: var(--space-3) var(--space-4); }
+.tag-solid { background: var(--color-accent-900); color: var(--color-bg); }
+.tag-bad { background: var(--color-bad); color: #fff; }
+
+.readout { display: flex; flex-wrap: wrap; gap: var(--space-4) var(--space-8); margin: 0; }
+.readout dt { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+              color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.readout dd { margin: 0; font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 22px;
+              font-variant-numeric: tabular-nums; }
+
+.table-wrap { overflow-x: auto; }
+.table td, .table th { vertical-align: top; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.actions-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
+form.inline { display: inline; margin: 0; }
+
+/* batch page: tabs as sections, Corrections in red */
+.tab-jump { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tab-jump a { text-decoration: none; font-size: 13px; }
+.tab-section { border: 1px solid var(--color-divider); padding: var(--space-4); }
+.tab-section > h2 { display: flex; gap: var(--space-3); align-items: baseline; }
+.tab-corrections { background: var(--color-bad-bg); border-color: var(--color-bad-line); }
+.tab-corrections > h2 { color: var(--color-bad); }
+.tab-deleted { opacity: 0.7; }
+
+.invoice {
+  display: grid; grid-template-columns: minmax(160px, 250px) 1fr; gap: var(--space-4);
+  padding: var(--space-4) 0; border-top: 1px solid var(--color-divider);
+}
+.invoice:first-of-type { border-top: 0; }
+.thumbs { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.thumb { display: flex; flex-direction: column; gap: 2px; width: 116px; text-decoration: none; color: inherit; }
+.thumb img { width: 116px; height: 150px; object-fit: cover; object-position: top; border: 1px solid var(--color-divider);
+             background: var(--color-surface); }
+.thumb span { font-size: 11px; }
+.reasons { margin: var(--space-2) 0; padding-left: 18px; font-size: 14px; }
+.tab-corrections .reasons { color: var(--color-bad); }
+.lines { font-size: 13px; }
+.lines tr.starred td { background: color-mix(in srgb, var(--color-bad) 8%, transparent); }
+.star { color: var(--color-bad); font-weight: 700; }
+.why .reason { display: block; font-size: 12px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
+
+/* pairing */
+.pair { display: grid; grid-template-columns: auto 1fr; gap: var(--space-6); align-items: start; }
+.qr { width: 340px; max-width: 100%; image-rendering: pixelated; border: 1px solid var(--color-divider); background: #fff; }
+.code { font-family: ui-monospace, Consolas, monospace; font-size: 44px; letter-spacing: 0.18em; line-height: 1.1; }
+
+@media (max-width: 760px) {
+  .invoice, .pair { grid-template-columns: 1fr; }
+  .page-head h1 { font-size: 26px; }
+}

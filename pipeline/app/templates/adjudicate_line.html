@@ -1,0 +1,114 @@
+{# One disagreement, in the phone app's Industry shell: the photograph as a full-screen
+   sheet (as on the review screen), the three readings as plates, verdicts in the bottom bar. #}
+{% extends "base.html" %}
+{% block title %}Adjudicate {{ d.supplier }} {{ d.document_no or "" }}{% endblock %}
+{% block back %}
+  <a class="appbar-back" href="{{ url_for('adjudicate_list') }}" aria-label="back to the disagreements" style="text-decoration:none">&#8249;</a>
+{% endblock %}
+{% block bartitle %}{{ d.printed.description or "(no description)" }}{% endblock %}
+{% block barsub %}{{ d.supplier }} &middot; {{ d.document_no or "no number" }} &middot; {{ d.kind }}{% endblock %}
+{% block barcount %}{{ remaining }} left{% endblock %}
+{% block body %}
+<div class="scroll">
+  {% if d.images %}
+    <button type="button" class="photostrip blueprint" id="openphoto">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="photostrip-thumb" style="background-image:url('{{ url_for('page_image', name=d.images[0]) }}');background-size:cover;background-position:top center"></span>
+      <span style="min-width:0">
+        <span class="photostrip-label">The photograph</span><br>
+        <span class="photostrip-sub">find this line on the paper &middot; tap to open full screen</span>
+      </span>
+    </button>
+  {% endif %}
+
+  {% if verdict %}
+    <div class="plate notice blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <strong>Recorded: {{ verdict.verdict }}</strong>
+      {% if verdict.note %}<p>{{ verdict.note }}</p>{% endif %}
+    </div>
+  {% endif %}
+
+  <div class="kicker">As printed, read by the system</div>
+  <div class="plate blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <div class="line-desc">{{ d.printed.description or "(no description)" }}</div>
+    <div class="line-printed" style="margin-top:var(--space-2);flex-wrap:wrap">
+      <span>qty {{ d.printed.quantity if d.printed.quantity is not none else "—" }} {{ d.printed.unit or "" }}</span>
+      {% if d.printed.pack %}<span>{{ d.printed.pack }}</span>{% endif %}
+      <span>@ {{ "%.2f"|format(d.printed.unit_price) if d.printed.unit_price is not none else "—" }}</span>
+      <span>total {{ "%.2f"|format(d.printed.line_total) if d.printed.line_total is not none else "—" }}</span>
+    </div>
+  </div>
+
+  <div class="kicker">The system</div>
+  <div class="plate blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <dl class="readout">
+      <div><dt>Stock item</dt><dd>{{ d.system.item_name or "refused" }}</dd></div>
+      <div><dt>Base qty</dt><dd>{{ d.system.base_quantity if d.system.base_quantity is not none else "—" }} {{ d.system.base_unit or "" }}</dd></div>
+    </dl>
+    {% if d.system.refusal %}<p style="margin:var(--space-3) 0 0"><span class="tag tag-outline">{{ d.system.refusal.replace("_", " ") }}</span></p>{% endif %}
+    {% if d.system.reason %}<div class="reason" style="margin-top:var(--space-2)">{{ d.system.reason }}</div>{% endif %}
+  </div>
+
+  <div class="kicker">Keyed in Pilot</div>
+  <div class="plate blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <dl class="readout">
+      <div><dt>Stock item</dt><dd>{{ d.pilot.item }}</dd></div>
+      <div><dt>Quantity</dt><dd>{{ d.pilot.quantity }}</dd></div>
+    </dl>
+    <div class="line-meta" style="margin-top:var(--space-2)">{{ d.pilot.reference }} &middot; {{ d.pilot.date }}</div>
+  </div>
+
+  <form method="post" id="verdict" class="fields">
+    <div>
+      <label class="field-lab" for="note">Note, optional</label>
+      <input class="input" id="note" name="note" style="width:100%">
+    </div>
+  </form>
+</div>
+
+<div class="bottombar">
+  <div class="actions" style="grid-template-columns:1fr 1fr">
+    <button type="submit" form="verdict" name="verdict" value="system" class="btn btn-primary">System matches</button>
+    <button type="submit" form="verdict" name="verdict" value="pilot" class="btn btn-primary">Pilot matches</button>
+    <button type="submit" form="verdict" name="verdict" value="neither" class="btn btn-secondary">Neither is right</button>
+    <button type="submit" form="verdict" name="verdict" value="unclear" class="btn btn-secondary">Paper unclear</button>
+  </div>
+  <span class="bottombar-note">Decide from the paper, not from either reading. Each verdict is recorded.</span>
+</div>
+
+{% if d.images %}
+<div class="sheet" id="photosheet" style="display:none">
+  <div class="appbar">
+    <button type="button" class="appbar-back" id="closephoto" aria-label="close">&#8249;</button>
+    <span class="appbar-text">
+      <span class="appbar-title">The photograph</span>
+      <span class="appbar-sub">{{ d.supplier }} &middot; {{ d.images|length }} page{{ "" if d.images|length == 1 else "s" }}</span>
+    </span>
+  </div>
+  <div class="sheet-body">
+    <div style="width:100%">
+      {% for img in d.images %}
+        <img src="{{ url_for('page_image', name=img) }}" alt="invoice page {{ loop.index }}" loading="lazy"
+             style="width:100%;border:1px solid var(--color-divider);margin-bottom:var(--space-3)">
+      {% endfor %}
+    </div>
+  </div>
+  <div class="bottombar">
+    <button type="button" class="btn btn-secondary btn-full" id="closephoto2">Back to the readings</button>
+  </div>
+</div>
+<script>
+(function () {
+  var sheet = document.getElementById("photosheet");
+  ["openphoto", "closephoto", "closephoto2"].forEach(function (id, i) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("click", function () { sheet.style.display = i === 0 ? "flex" : "none"; });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

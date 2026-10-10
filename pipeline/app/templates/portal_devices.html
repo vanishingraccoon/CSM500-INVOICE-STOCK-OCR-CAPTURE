@@ -1,0 +1,38 @@
+{% extends "portal_base.html" %}
+{% block title %}Devices{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Devices</h1>
+  <span class="muted">Phones paired with this laptop. Revoke a lost or replaced phone: it can no longer upload or read anything, and its batches stay.</span>
+</div>
+
+{% if devices %}
+<div class="table-wrap">
+  <table class="table">
+    <thead><tr><th>Phone</th><th>Shop</th><th>Paired</th><th>Last seen</th><th class="num">Batches</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+    {% for d in devices %}
+      <tr>
+        <td>{{ d.name }}<br><span class="mono muted">{{ d.device_id }}</span></td>
+        <td>{{ d.shop_name }}</td>
+        <td>{{ d.paired_at|when }}</td>
+        <td>{{ d.last_seen_at|when or "never" }}</td>
+        <td class="num">{{ d.batches }}</td>
+        <td>{% if d.revoked_at %}<span class="tag tag-neutral">revoked {{ d.revoked_at|when }}</span>{% else %}<span class="tag tag-accent">active</span>{% endif %}</td>
+        <td>
+          {% if not d.revoked_at %}
+          <form class="inline" method="post" action="{{ url_for('portal.revoke', device_id=d.device_id) }}"
+                onsubmit="return confirm('Revoke {{ d.name|e }}? It will have to be paired again.')">
+            <button class="btn btn-secondary" type="submit">Revoke</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+  <p class="muted">No phones paired yet. <a href="{{ url_for('portal.pair') }}">Pair one</a>.</p>
+{% endif %}
+{% endblock %}

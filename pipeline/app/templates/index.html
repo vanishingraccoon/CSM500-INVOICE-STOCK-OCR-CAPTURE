@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block barcount %}{{ reviewed }} reviewed{% endblock %}
+{% block body %}
+<div class="scroll">
+  {% if request.args.get("upload_error") %}
+    <div class="plate notice blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <strong>That file is not a photograph</strong>
+      <p>Nothing was recorded. Take the photograph again, or choose a JPEG or PNG.</p>
+    </div>
+  {% endif %}
+  <div class="kicker">To review <span class="tag tag-outline">{{ rows|rejectattr('reviewed')|list|length }} invoices</span></div>
+
+  {% for r in rows %}
+    <a class="inv" href="{{ url_for('invoice', invoice_id=r.id) }}">
+      <span class="inv-name">{{ r.supplier }}</span>
+      <span class="inv-meta">{{ r.document_no or "no number" }} &middot; {{ r.date or "no date" }} &middot; {{ r.lines }} lines</span>
+      <span class="inv-stats">
+        {% if r.adds_up is none %}<span class="tag tag-neutral">no stated total</span>
+        {% elif r.adds_up %}<span class="tag tag-accent">adds up</span>
+        {% else %}<span class="tag tag-solid">does not add up</span>{% endif %}
+        {% if r.refused %}<span class="tag tag-outline">{{ r.refused }} refused</span>
+        {% else %}<span class="tag tag-neutral">none refused</span>{% endif %}
+        {% if r.flags %}<span class="tag tag-solid">{{ r.flags }} flagged</span>
+        {% else %}<span class="tag tag-neutral">no flags</span>{% endif %}
+        {% if r.reviewed %}<span class="tag tag-neutral">reviewed</span>
+        {% else %}<span class="tag tag-outline">to review</span>{% endif %}
+      </span>
+    </a>
+  {% else %}
+    <p class="bottombar-note">No invoices yet. Run the pipeline, or photograph one below.</p>
+  {% endfor %}
+</div>
+
+<div class="bottombar">
+  {# The file input is the whole button: on Android, capture="environment" opens the
+     camera straight away, and the form posts as soon as a photograph is taken. #}
+  <form action="{{ url_for('upload') }}" method="post" enctype="multipart/form-data" id="shoot">
+    <label class="btn btn-primary btn-full blueprint" for="photo">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      Photograph an invoice
+    </label>
+    <input type="file" id="photo" name="photo" accept="image/*" capture="environment"
+           style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"
+           onchange="document.getElementById('shoot').submit()">
+  </form>
+  <a class="btn btn-secondary btn-full" href="{{ url_for('export_all') }}">Export reviewed rows</a>
+  {# Added to the design: the adjudication instrument, reached from the list. #}
+  <a class="btn btn-secondary btn-full" href="{{ url_for('adjudicate_list') }}">Settle disagreements with Pilot</a>
+  <span class="bottombar-note">Recognition runs on the computer serving this app. Nothing leaves the building; the first photograph after opening the app takes longer while the models load.</span>
+</div>
+{% endblock %}

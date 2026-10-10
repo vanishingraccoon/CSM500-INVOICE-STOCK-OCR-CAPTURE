@@ -1,0 +1,123 @@
+{% extends "portal_base.html" %}
+{% block title %}Batch {{ b.created_at|when }}{% endblock %}
+{% block head %}{% if b.status in ("uploading", "processing") %}<meta http-equiv="refresh" content="10">{% endif %}{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Batch of {{ b.created_at|when }}</h1>
+  <span class="tag {{ 'tag-accent' if b.status == 'submitted' else 'tag-outline' }}">{{ b.status }}</span>
+  <span class="muted">{{ shop_name }} &middot; {{ device_name }} &middot; <span class="mono">{{ b.batch_id }}</span></span>
+</div>
+
+<div class="plate">
+  <dl class="readout">
+    <div><dt>Photos</dt><dd>{{ b.progress.photos }}</dd></div>
+    <div><dt>Waiting</dt><dd>{{ b.progress.waiting }}</dd></div>
+    <div><dt>Reading</dt><dd>{{ b.progress.reading }}</dd></div>
+    <div><dt>Read</dt><dd>{{ b.progress.read }}</dd></div>
+    <div><dt>Failed</dt><dd>{{ b.progress.failed }}</dd></div>
+    {% for t in tabs if t != "deleted" %}<div><dt>{{ titles[t] }}</dt><dd class="{{ 'bad' if t == 'corrections' and b.counts[t] }}">{{ b.counts[t] }}</dd></div>{% endfor %}
+  </dl>
+  {% if b.status == "submitted" %}
+    <p id="report" style="margin:var(--space-3) 0 0">Submitted {{ b.submitted_at|when }}.
+      Input report{% if report %} version {{ report.version }}{% if report.built_at %}, built {{ report.built_at|when }}{% endif %}{% endif %}:
+      <a href="{{ url_for('portal.report_pdf', batch_id=b.batch_id) }}">PDF to print</a> &middot;
+      <a href="{{ url_for('portal.report_csv', batch_id=b.batch_id) }}">CSV</a></p>
+    <div class="actions-row" style="margin-top:var(--space-2)">
+      <form class="inline" method="post" action="{{ url_for('portal.rebuild_report', batch_id=b.batch_id) }}"
+            onsubmit="return confirm('Rebuild this report? Version {{ (report.version if report else 0) + 1 }} is issued from the batch as it stands now.')">
+        <button class="btn btn-secondary" type="submit">Rebuild report</button>
+      </form>
+      <span class="muted">{% if older %}{{ older|length }} earlier version{{ "" if older|length == 1 else "s" }} kept (version{{ "" if older|length == 1 else "s" }} {{ older|map(attribute='version')|join(', ') }}); the printed copies still match them.{% else %}A rebuild issues version 2 and keeps this one's file.{% endif %}</span>
+    </div>
+  {% endif %}
+  {% if retaken %}
+    <p class="bad" style="margin:var(--space-2) 0 0">{{ retaken|length }} invoice{{ "" if retaken|length == 1 else "s" }} changed after this batch's report (a retake or an edit); rebuild the report to take {{ "it" if retaken|length == 1 else "them" }} in now, or {{ "it joins" if retaken|length == 1 else "they join" }} the next report this shop submits.</p>
+  {% endif %}
+</div>
+
+<nav class="tab-jump">
+  {% for t in tabs if by_tab[t] %}
+    <a class="tag {{ 'tag-bad' if t == 'corrections' else 'tag-outline' }}" href="#tab-{{ t }}">{{ titles[t] }} {{ by_tab[t]|length }}</a>
+  {% endfor %}
+</nav>
+
+{% if loose %}
+<section class="plate">
+  <h2>Not yet in an invoice</h2>
+  <p class="muted">Pages join an invoice once they are read.</p>
+  <div class="thumbs">
+    {% for p in loose %}
+      <a class="thumb" href="{{ url_for('portal.photo_image', photo_id=p.photo_id) }}" target="_blank">
+        <img src="{{ url_for('portal.photo_image', photo_id=p.photo_id, w=240) }}" alt="page {{ p.ordinal }}" loading="lazy">
+        <span>page {{ p.ordinal }} &middot; {{ "waiting" if p.state == "stored" else p.state }}</span>
+      </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+{% for t in tabs if by_tab[t] %}
+<section class="tab-section tab-{{ t }}" id="tab-{{ t }}">
+  <h2>{{ titles[t] }} <span class="muted">{{ by_tab[t]|length }}</span></h2>
+  {% for inv in by_tab[t] %}
+  <article class="invoice" id="{{ inv.invoice_id }}">
+    <div class="thumbs">
+      {% for p in inv.pages %}
+        <a class="thumb" href="{{ url_for('portal.photo_image', photo_id=p.photo_id) }}" target="_blank">
+          <img src="{{ url_for('portal.photo_image', photo_id=p.photo_id, w=240) }}" alt="page {{ p.ordinal }}" loading="lazy">
+          <span>page {{ p.ordinal }} &middot; {{ "waiting" if p.state == "stored" else p.state }}{% if not p.quality.ok %} &middot; <span class="bad">quality</span>{% endif %}</span>
+        </a>
+      {% endfor %}
+    </div>
+    <div>
+      <h3>{{ inv.supplier_name or "Supplier not recognised" }}: {{ inv.title }}</h3>
+      <div class="muted">
+        Date {{ inv.date or "not read" }} &middot; invoice states {{ inv.stated_total_excl|rands }} excl. VAT &middot;
+        lines sum {{ inv.lines_sum_excl|rands }} &middot;
+        {% if inv.adds_up %}adds up{% elif inv.adds_up is sameas false %}<span class="bad">does not add up</span>{% else %}total not read{% endif %}
+        {% if inv.duplicate_of %} &middot; repeats <a href="#{{ inv.duplicate_of }}">{{ inv.duplicate_of }}</a>{% endif %}
+      </div>
+      {% if inv.tab_reasons %}
+        <ul class="reasons">{% for r in inv.tab_reasons %}<li>{{ r }}</li>{% endfor %}</ul>
+      {% endif %}
+      {% for n in inv.notes %}<p class="muted" style="margin:var(--space-1) 0">Note: {{ n }}</p>{% endfor %}
+      {% if inv.lines %}
+      <div class="table-wrap">
+        <table class="table lines">
+          <thead>
+            <tr><th></th><th class="num">#</th><th>As printed</th><th class="num">Qty</th><th class="num">Total</th>
+                <th>Stock item</th><th class="num">Base qty</th><th class="num">Cost excl.</th><th>Why</th></tr>
+          </thead>
+          <tbody>
+          {% for l in inv.lines %}
+            <tr class="{{ 'starred' if l.star }}">
+              <td>{% if l.star %}<span class="star" title="needs the manager">&#9733;</span>{% endif %}{% if l.entered_by == "manager" %}<span title="typed by the manager">&#9998;</span>{% endif %}</td>
+              <td class="num">{{ l.index + 1 }}</td>
+              <td>{{ l.printed.description if l.printed else "(added by the manager)" }}{% if l.printed and l.printed.pack %} <span class="muted">{{ l.printed.pack }}</span>{% endif %}</td>
+              <td class="num">{{ (l.printed.quantity if l.printed else l.quantity)|qty }}{% if l.printed and l.printed.unit %} {{ l.printed.unit }}{% endif %}</td>
+              <td class="num">{{ (l.printed.line_total if l.printed else l.cost)|cost }}</td>
+              <td>{% if l.item %}{{ l.item.name }}{% elif l.free_text %}{{ l.free_text }} <span class="muted">(not in key)</span>{% else %}<span class="muted">none</span>{% endif %}</td>
+              <td class="num">{{ l.base_quantity|qty }}{% if l.base_quantity is not none and l.item %} {{ l.item.base_unit }}{% endif %}</td>
+              <td class="num">{{ l.cost|cost }}</td>
+              <td class="why">
+                {% if l.refusal %}<span class="tag tag-outline">{{ l.refusal|replace("_", " ") }}</span>{% endif %}
+                {% for f in l.flags %}<span class="tag tag-solid">{{ f.kind|replace("_", " ") }}</span>{% endfor %}
+                <span class="reason">{{ l.reason }}</span>
+                {% for f in l.flags %}<span class="reason">{{ f.reason }}</span>{% endfor %}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% endif %}
+    </div>
+  </article>
+  {% endfor %}
+</section>
+{% endfor %}
+
+{% if not b.invoices and not loose %}
+  <p class="muted">No photographs in this batch yet.</p>
+{% endif %}
+{% endblock %}

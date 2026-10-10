@@ -1,0 +1,28 @@
+{# The laptop portal's shell, in the Industry look. NO LOGINS YET (future work): anyone who can reach this
+   server can use every page, so it must listen on the office network only. Local files only, no CDN. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Invoice portal{% endblock %} · Invoice capture</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='industry.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='portal.css') }}">
+{% block head %}{% endblock %}
+</head>
+<body class="portal">
+<nav class="nav portal-nav">
+  <span class="nav-brand">Invoice capture</span>
+  <a href="{{ url_for('portal.index') }}" {% if active == 'batches' %}aria-current="page"{% endif %}>Batches</a>
+  <a href="{{ url_for('portal.unresolved') }}" {% if active == 'unresolved' %}aria-current="page"{% endif %}>Unresolved</a>
+  <a href="{{ url_for('portal.key') }}" {% if active == 'key' %}aria-current="page"{% endif %}>Key</a>
+  <a href="{{ url_for('portal.pair') }}" {% if active == 'pair' %}aria-current="page"{% endif %}>Pair a phone</a>
+  <a href="{{ url_for('portal.devices') }}" {% if active == 'devices' %}aria-current="page"{% endif %}>Devices</a>
+  <a href="{{ url_for('index') }}">Binder review</a>
+  <a href="{{ url_for('adjudicate_list') }}">Adjudicate</a>
+</nav>
+<main class="portal-main">
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

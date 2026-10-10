@@ -1,0 +1,261 @@
+{% extends "base.html" %}
+{% block title %}{{ r.supplier or "Invoice" }} {{ r.document_no or "" }}{% endblock %}
+{% block bartitle %}{{ r.supplier or "unknown supplier" }}{% endblock %}
+{% block barsub %}{{ r.document_no or "no number" }} &middot; {{ r.date or "no date" }}{% endblock %}
+{% block back %}
+  <a class="appbar-back" href="{{ url_for('index') }}" aria-label="back to the list" style="text-decoration:none">&#8249;</a>
+{% endblock %}
+{% block barcount %}<span id="needcount"></span>{% endblock %}
+{% block body %}
+{% set ns = namespace(need=0) %}
+{% for x in lines %}{% if x.n.refusal or x.flags %}{% set ns.need = ns.need + 1 %}{% endif %}{% endfor %}
+
+<div class="scroll">
+
+  {% if images %}
+    <button type="button" class="photostrip blueprint" id="openphoto">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <span class="photostrip-thumb" style="background-image:url('{{ url_for('page_image', name=images[0]) }}');background-size:cover;background-position:top center"></span>
+      <span style="min-width:0">
+        <span class="photostrip-label">The photograph</span><br>
+        <span class="photostrip-sub">{{ images|length }} page{{ "" if images|length == 1 else "s" }} &middot; tap to open full screen</span>
+      </span>
+    </button>
+  {% endif %}
+
+  {% if saved %}
+    <div class="plate blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <div class="kicker">Saved</div>
+      {% if decision %}<p class="bottombar-note" style="margin:var(--space-2) 0 0">{{ decision.review_seconds }} seconds on this invoice.</p>{% endif %}
+    </div>
+  {% endif %}
+
+  {% for w in r.warnings if not w.startswith("line ") %}
+    <div class="plate notice blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <strong>Warning</strong><p>{{ w }}</p>
+    </div>
+  {% endfor %}
+
+  {% for f in invoice_flags %}
+    <div class="plate notice blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      <strong>{{ f.kind.replace("_", " ") }}</strong>
+      <p>{{ f.reason }}</p>
+    </div>
+  {% endfor %}
+
+  <div class="plate blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <dl class="readout">
+      <div><dt>Lines</dt><dd>{{ r.lines|length }}</dd></div>
+      <div><dt>Need you</dt><dd>{{ ns.need }} of {{ r.lines|length }}</dd></div>
+      <div><dt>Lines sum</dt><dd>{{ "R%.2f"|format(r.lines_sum_excl) if r.lines_sum_excl is not none else "—" }}</dd></div>
+      <div><dt>Invoice states</dt><dd>{{ "R%.2f"|format(r.stated_total_excl) if r.stated_total_excl is not none else "—" }}</dd></div>
+    </dl>
+    <div style="margin-top:var(--space-3)">
+      {% if r.adds_up is none %}<span class="tag tag-neutral" style="font-size:13px">no stated total</span>
+      {% elif r.adds_up %}<span class="tag tag-accent" style="font-size:13px">adds up</span>
+      {% else %}<span class="tag tag-solid" style="font-size:13px">does not add up</span>{% endif %}
+    </div>
+  </div>
+
+  <form method="post" id="review" style="display:flex;flex-direction:column;gap:var(--space-3)">
+    <input type="hidden" name="opened" value="{{ opened }}">
+
+    <div class="kicker">Lines, as printed</div>
+
+    <div class="lines blueprint">
+      <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+      {% for x in lines %}
+        {% set n = x.n %}
+        {% set guarded = n.refusal or x.flags %}
+        <div class="line {% if n.refusal %}line-refused{% elif x.flags %}line-flagged{% endif %}"
+             data-line="{{ x.i }}" data-guard="{{ 1 if guarded else 0 }}">
+
+          <div>
+            <div class="line-head">
+              <span class="lineno">{{ x.i + 1 }}</span>
+              <span class="line-desc">{{ x.line.description or "(no description)" }}</span>
+            </div>
+            <div class="line-meta">
+              {%- if x.line.unit %}{{ x.line.unit }}{% endif -%}
+              {%- if x.line.pack %} &middot; {{ x.line.pack }}{% endif -%}
+              {%- if x.line.unit_price is not none %} &middot; @ {{ "%.2f"|format(x.line.unit_price) }}{% endif -%}
+            </div>
+          </div>
+
+          <div class="line-printed">
+            <span>qty {{ "%g"|format(x.line.quantity) if x.line.quantity is not none else "—" }}</span>
+            <span>total {{ "%.2f"|format(x.line.line_total) if x.line.line_total is not none else "—" }}</span>
+          </div>
+
+          {% if n.refusal %}
+            <div>
+              <span class="tag tag-outline">{{ n.refusal.replace("_", " ") }}</span>
+              {% if n.reason %}<div class="reason" style="margin-top:var(--space-1)">{{ n.reason }}</div>{% endif %}
+            </div>
+          {% endif %}
+          {% for f in x.flags %}
+            <div>
+              <span class="tag tag-solid">{{ f.kind.replace("_", " ") }}</span>
+              <div class="reason" style="margin-top:var(--space-1)">{{ f.reason }}</div>
+            </div>
+          {% endfor %}
+          {% for w in r.warnings if w.startswith("line " ~ (x.i + 1) ~ ":") %}
+            <div class="reason">{{ w.split(": ", 1)[1] }}</div>
+          {% endfor %}
+
+          <div class="fields">
+            <div>
+              <label class="field-lab" for="item_{{ x.i }}">Stock item</label>
+              <input class="input" id="item_{{ x.i }}" name="item_{{ x.i }}" list="stock"
+                     value="{{ x.item_value }}" placeholder="search stock" style="width:100%">
+            </div>
+            <div class="fields-2">
+              <div>
+                <label class="field-lab" for="qty_{{ x.i }}">Base qty{% if n.base_unit %} &middot; {{ n.base_unit }}{% endif %}</label>
+                <input class="input field-num" id="qty_{{ x.i }}" name="qty_{{ x.i }}" inputmode="decimal"
+                       value="{{ '%g'|format(x.qty_value) if x.qty_value is not none else '' }}" style="width:100%">
+              </div>
+              <div>
+                <label class="field-lab" for="cost_{{ x.i }}">Cost excl.</label>
+                <input class="input field-num" id="cost_{{ x.i }}" name="cost_{{ x.i }}" inputmode="decimal"
+                       value="{{ '%.2f'|format(x.cost_value) if x.cost_value is not none else '' }}" style="width:100%">
+              </div>
+            </div>
+          </div>
+
+          {# The hidden field is what posts. The buttons set an intent; on a refused or
+             flagged line that intent only becomes "accept" once the tick is ticked, so a
+             single stray tap cannot accept a line the pipeline refused. #}
+          <input type="hidden" name="action_{{ x.i }}" value="{{ x.action }}">
+          <div class="actions">
+            <button type="button" data-action="accept" class="btn btn-secondary">Accept</button>
+            <button type="button" data-action="correct" class="btn btn-secondary">Correct</button>
+            <button type="button" data-action="skip" class="btn btn-off-bad">Skip</button>
+          </div>
+          {% if guarded %}
+            <label class="confirm" style="display:none">
+              {# reopening a saved invoice keeps the tick, or the saved accept would silently post as a correction #}
+              <input type="checkbox" name="checked_{{ x.i }}" value="1"{% if x.decided.photo_checked and x.action == "accept" %} checked{% endif %}>
+              <span>I checked the photograph. Tick to accept; until then this line posts as a correction.</span>
+            </label>
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <datalist id="stock">
+      {% for it in stock_items %}<option value="{{ it.code }} {{ it.name }}"></option>{% endfor %}
+    </datalist>
+  </form>
+</div>
+
+<div class="bottombar">
+  <button type="submit" form="review" class="btn btn-primary btn-full blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    Save review
+  </button>
+  <span class="bottombar-note" id="savenote">Every change against what the system proposed is recorded.</span>
+</div>
+
+{% if images %}
+<div class="sheet" id="photosheet" style="display:none">
+  <div class="appbar">
+    <button type="button" class="appbar-back" id="closephoto" aria-label="close">&#8249;</button>
+    <span class="appbar-text">
+      <span class="appbar-title">The photograph</span>
+      <span class="appbar-sub">{{ r.supplier or "unknown supplier" }} &middot; {{ images|length }} page{{ "" if images|length == 1 else "s" }}</span>
+    </span>
+  </div>
+  <div class="sheet-body">
+    <div style="width:100%">
+      {% for img in images %}
+        <img src="{{ url_for('page_image', name=img) }}" alt="invoice page {{ loop.index }}" loading="lazy"
+             style="width:100%;border:1px solid var(--color-divider);margin-bottom:var(--space-3)">
+      {% endfor %}
+    </div>
+  </div>
+  <div class="bottombar">
+    <button type="button" class="btn btn-secondary btn-full" id="closephoto2">Back to the lines</button>
+  </div>
+</div>
+{% endif %}
+
+<script>
+/* No dependency, no CDN. Three jobs: the photograph sheet, painting the action
+   buttons, and holding a refused or flagged line at "correct" until the reviewer
+   ticks that they checked the photograph. */
+(function () {
+  var sheet = document.getElementById("photosheet");
+  function show(v) { if (sheet) sheet.style.display = v ? "flex" : "none"; }
+  ["openphoto", "closephoto", "closephoto2"].forEach(function (id, i) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("click", function () { show(i === 0); });
+  });
+
+  var note = document.getElementById("savenote");
+  var needCount = document.getElementById("needcount");
+  var rows = [].slice.call(document.querySelectorAll("[data-line]"));
+  var guarded = rows.filter(function (tr) { return tr.getAttribute("data-guard") === "1"; }).length;
+  if (needCount) needCount.textContent = guarded + " need you";
+
+  function tally() {
+    var pending = 0, exporting = 0;
+    rows.forEach(function (tr) {
+      if (tr.querySelector('input[name^="action_"]').value === "accept") exporting++;
+      if (tr.classList.contains("line-unconfirmed")) pending++;
+    });
+    note.textContent =
+      (pending ? (pending === 1
+        ? "1 accepted line still needs the photograph tick — it posts as a correction until ticked. "
+        : pending + " accepted lines still need the photograph tick — they post as corrections until ticked. ") : "") +
+      exporting + " of " + rows.length + " lines will be exported.";
+  }
+
+  rows.forEach(function (row) {
+    var hidden = row.querySelector('input[name^="action_"]');
+    var tick = row.querySelector('input[name^="checked_"]');
+    var wrap = row.querySelector(".confirm");
+    var guard = row.getAttribute("data-guard") === "1";
+    var btns = [].slice.call(row.querySelectorAll("button[data-action]"));
+    var intent = hidden.value;
+
+    function paint() {
+      btns.forEach(function (b) {
+        var on = b.getAttribute("data-action") === intent;
+        var bad = b.getAttribute("data-action") === "skip";
+        b.className = "btn " + (bad ? (on ? "btn-on-bad" : "btn-off-bad") : (on ? "btn-on" : "btn-secondary"));
+        b.setAttribute("aria-pressed", on ? "true" : "false");
+      });
+      var needTick = guard && intent === "accept";
+      if (wrap) {
+        wrap.style.display = needTick ? "flex" : "none";
+        wrap.className = "confirm" + (tick && tick.checked ? " confirm-done" : "");
+        if (tick) {
+          tick.nextElementSibling.textContent = tick.checked
+            ? "Checked against the photograph — accepted"
+            : "I checked the photograph. Tick to accept; until then this line posts as a correction.";
+        }
+      }
+      var held = needTick && !(tick && tick.checked);
+      hidden.value = held ? "correct" : intent;
+      row.classList.toggle("line-unconfirmed", held);
+      tally();
+    }
+
+    btns.forEach(function (b) {
+      b.addEventListener("click", function () {
+        intent = b.getAttribute("data-action");
+        if (intent !== "accept" && tick) tick.checked = false;
+        paint();
+      });
+    });
+    if (tick) tick.addEventListener("change", paint);
+    paint();
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,54 @@
+{% extends "portal_base.html" %}
+{% block title %}Batches{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Batches</h1>
+  <span class="muted">One batch is one scanner session on a phone. Newest first; photographs are read in the background.</span>
+</div>
+
+{% for g in groups %}
+<section>
+  <h2>{{ g.shop.name }}</h2>
+  {% if not g.batches %}
+    <p class="muted">No batches yet. <a href="{{ url_for('portal.pair', shop=g.shop.shop_id) }}">Pair a phone</a>, then scan a batch of invoices with it.</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Photographed</th><th>Phone</th><th>Status</th><th class="num">Photos</th><th>Reading</th>
+          <th class="num">Good</th><th class="num">Corrections</th><th class="num">Retake</th><th class="num">Duplicates</th>
+          <th>Input report</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for b in g.batches %}
+        <tr>
+          <td><a href="{{ url_for('portal.batch', batch_id=b.batch_id) }}">{{ b.created_at|when }}</a></td>
+          <td>{{ b.device_name or "" }}</td>
+          <td><span class="tag {{ 'tag-accent' if b.status == 'submitted' else 'tag-outline' }}">{{ b.status }}</span></td>
+          <td class="num">{{ b.progress.photos }}</td>
+          <td>
+            {% if b.progress.waiting or b.progress.reading %}{{ b.progress.reading }} reading, {{ b.progress.waiting }} waiting
+            {% elif b.progress.failed %}<span class="bad">{{ b.progress.failed }} could not be read</span>
+            {% elif b.progress.photos %}all read{% else %}<span class="muted">no photographs yet</span>{% endif %}
+          </td>
+          <td class="num">{{ b.counts.good }}</td>
+          <td class="num {{ 'bad' if b.counts.corrections }}">{{ b.counts.corrections }}</td>
+          <td class="num">{{ b.counts.retake }}</td>
+          <td class="num">{{ b.counts.duplicates }}</td>
+          <td>
+            {% if b.status == "submitted" %}
+              <a href="{{ url_for('portal.report_pdf', batch_id=b.batch_id) }}">PDF</a> &middot;
+              <a href="{{ url_for('portal.report_csv', batch_id=b.batch_id) }}">CSV</a>
+            {% else %}<span class="muted">once submitted</span>{% endif %}
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

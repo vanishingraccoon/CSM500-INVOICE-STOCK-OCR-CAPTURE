@@ -1,0 +1,28 @@
+{# The phone shell. industry.css is the design system, vendored with its web-font
+   @import removed; app.css is this app's phone layer over it. Both local — no CDN,
+   no web font, no remote icon. Put them in app/static/. #}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f2f2f3">
+<meta name="mobile-web-app-capable" content="yes">
+<title>{% block title %}Invoice review{% endblock %}</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='industry.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+</head>
+<body>
+<div class="screen">
+  <div class="appbar">
+    {% block back %}{% endblock %}
+    <span class="appbar-text">
+      <span class="appbar-title">{% block bartitle %}Invoice review{% endblock %}</span>
+      <span class="appbar-sub">{% block barsub %}News Cafe Eastgate{% endblock %}</span>
+    </span>
+    <span class="appbar-count">{% block barcount %}{% endblock %}</span>
+  </div>
+  {% block body %}{% endblock %}
+</div>
+</body>
+</html>

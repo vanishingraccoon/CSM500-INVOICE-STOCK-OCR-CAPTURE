@@ -1,0 +1,45 @@
+{# Adjudication list, in the phone app's Industry shell: one plate per disagreement. #}
+{% extends "base.html" %}
+{% block title %}Adjudication{% endblock %}
+{% block back %}
+  <a class="appbar-back" href="{{ url_for('index') }}" aria-label="back to the invoices" style="text-decoration:none">&#8249;</a>
+{% endblock %}
+{% block bartitle %}Settle disagreements{% endblock %}
+{% block barsub %}The system against Pilot, decided on the paper{% endblock %}
+{% block barcount %}{{ decided|length }} settled{% endblock %}
+{% block body %}
+<div class="scroll">
+  <div class="plate blueprint">
+    <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+    <dl class="readout">
+      <div><dt>All</dt><dd>{{ total }}</dd></div>
+      {% for k, counts in summary.items() %}
+        <div><dt>{{ k }}</dt><dd>{{ counts.values()|sum }}</dd></div>
+      {% endfor %}
+    </dl>
+    <div class="inv-stats" style="margin-top:var(--space-3)">
+      <a class="tag tag-outline" href="{{ url_for('adjudicate_list') }}">all</a>
+      {% for k in summary %}<a class="tag tag-outline" href="{{ url_for('adjudicate_list', kind=k) }}">{{ k }}</a>{% endfor %}
+    </div>
+  </div>
+
+  <div class="kicker">Neither reading is assumed right</div>
+
+  {% for d in items %}{% set v = decided.get(d.key) %}
+    <a class="inv" href="{{ url_for('adjudicate_line', invoice_id=d.invoice_id, line_index=d.line_index) }}">
+      <span class="inv-name">{{ d.printed.description or "(no description)" }}</span>
+      <span class="inv-meta">{{ d.supplier }} &middot; {{ d.document_no or "no number" }} &middot; {{ d.date or "no date" }}</span>
+      <span class="reason">
+        System: {% if d.system.item_name %}{{ d.system.item_name }} &middot; {{ d.system.base_quantity }} {{ d.system.base_unit or "" }}{% else %}refused, {{ (d.system.refusal or "").replace("_", " ") }}{% endif %}<br>
+        Pilot: {{ d.pilot.item }} &middot; {{ d.pilot.quantity }}
+      </span>
+      <span class="inv-stats">
+        <span class="tag tag-outline">{{ d.kind }}</span>
+        {% if v %}<span class="tag tag-accent">{{ v.verdict }}</span>{% else %}<span class="tag tag-neutral">undecided</span>{% endif %}
+      </span>
+    </a>
+  {% else %}
+    <p class="bottombar-note">No disagreements found. Run the pipeline first.</p>
+  {% endfor %}
+</div>
+{% endblock %}

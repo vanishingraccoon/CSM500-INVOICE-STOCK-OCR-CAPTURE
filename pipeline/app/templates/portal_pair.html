@@ -1,0 +1,44 @@
+{% extends "portal_base.html" %}
+{% block title %}Pair a phone{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="{{ refresh_in }}">{% endblock %}
+{% block body %}
+<div class="page-head">
+  <h1>Pair a phone</h1>
+  <span class="muted">A paired phone can upload batches and fix invoices for its shop. There are no logins yet: pair only the shop's own phones, on the office network.</span>
+</div>
+
+{% if local_only %}
+  <div class="warn">The server is listening on this laptop only, so no phone can reach it. Stop it and start it again with <span class="mono">INVOICE_HOST=0.0.0.0</span> while the laptop is on the office Wi-Fi.</div>
+{% endif %}
+
+<nav class="tab-jump">
+  {% for s in shops.values() %}
+    <a class="tag {{ 'tag-accent' if s.shop_id == shop.shop_id else 'tag-outline' }}" href="{{ url_for('portal.pair', shop=s.shop_id) }}">{{ s.name }}</a>
+  {% endfor %}
+</nav>
+
+<section class="plate pair">
+  <img class="qr" src="{{ url_for('portal.pair_qr', code=code.code) }}" alt="QR code pairing a phone with {{ shop.name }}">
+  <div>
+    <p>In the phone app, choose <b>Pair with the laptop</b> and scan the code. If the camera cannot read it, type these instead:</p>
+    <div class="code">{{ code.code }}</div>
+    <dl class="readout" style="margin-top:var(--space-4)">
+      <div><dt>Server address</dt><dd class="mono" style="font-size:18px">{{ server }}</dd></div>
+      <div><dt>Shop</dt><dd>{{ shop.name }}</dd></div>
+      <div><dt>Valid until</dt><dd>{{ expires_at|when }}</dd></div>
+    </dl>
+    <p class="muted" style="margin-top:var(--space-3)">Single use, valid for 10 minutes. This page shows a fresh code before this one runs out.
+      If the address is wrong, set <span class="mono">INVOICE_PUBLIC_URL</span> and restart the server.</p>
+    <form method="post" action="{{ url_for('portal.pair_new') }}" class="actions-row">
+      <input type="hidden" name="shop" value="{{ shop.shop_id }}">
+      <button class="btn btn-secondary" type="submit">Show a new code</button>
+      <a href="{{ url_for('portal.devices') }}">Paired devices</a>
+    </form>
+    {% if recent %}
+      <p class="muted" style="margin-top:var(--space-3)">Last paired for {{ shop.name }}:
+        {% for d in recent %}{{ d.name }} ({{ d.paired_at|when }}){{ ", " if not loop.last }}{% endfor %}</p>
+    {% endif %}
+    <details style="margin-top:var(--space-3)"><summary>What the QR code holds</summary><pre class="mono">{{ payload }}</pre></details>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Plain HTTP (cleartext) is allowed on purpose, for this MSc project only.
+
+  The app talks to ONE local server: the always-on store laptop on the dedicated office Wi-Fi,
+  e.g. http://192.168.1.20:5000. Its IP address comes from the pairing QR code and is not known
+  when the app is built, so cleartext cannot be limited to a fixed domain here. Nothing is sent
+  to the internet; the device token travels only between this phone and that laptop.
+
+  The cloud release will use HTTPS only (cleartextTrafficPermitted="false") with proper logins
+  for owner / admin / manager instead of QR-paired device tokens.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

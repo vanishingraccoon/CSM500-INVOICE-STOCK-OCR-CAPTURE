@@ -17,3 +17,10 @@ Short dated summaries of completed project work and the decisions that affected 
 - Added lossless PDF page extraction with a rendering fallback.
 - Collected supplier aliases and document-number patterns in one registry.
 - Added header identification and tests for suppliers, invoice numbers, dates and page labels.
+
+## 9–10 October 2026 — weekend publication
+
+- Published the existing OCR, parsing, stock conversion, checks, evaluation and review code in stages.
+- Added the Android capture, upload and review application with its build files.
+- Pre-publication checks passed 252 Python tests and the Android debug build; Gradle reused the up-to-date Android unit-test result.
+- Further integration and submission review remain for Sunday and Monday.

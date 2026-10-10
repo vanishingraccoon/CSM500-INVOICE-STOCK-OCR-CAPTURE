@@ -22,11 +22,11 @@ To help restaurants cut down on manual stock entry and avoid unit input mistakes
 
 ## Running it
 
-Not yet.
+See `pipeline/README.md` for the Python setup and `android/README.md` for the Android build. Real OCR engines require additional setup described there.
 
 ## Status
 
-Initial project setup. The implementation will be added in reviewed stages.
+The existing Python pipeline and Android application have been published in reviewed stages. Integration and submission review continue through the weekend.
 
 ## Main areas
 

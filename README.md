@@ -33,3 +33,7 @@ The existing Python pipeline and Android application have been published in revi
 - `pipeline/` — Python ingestion, recognition, parsing, normalisation, checks and review portal.
 - `android/` — Android capture application.
 - `docs/` — project notes and dated progress summaries.
+
+## Repository history
+
+This repository contains the project code submitted for assessment. Development took place locally; the Git history records publication of the code rather than its full development history.

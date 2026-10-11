@@ -24,3 +24,12 @@ Short dated summaries of completed project work and the decisions that affected 
 - Added the Android capture, upload and review application with its build files.
 - Pre-publication checks passed 252 Python tests and the Android debug build; Gradle reused the up-to-date Android unit-test result.
 - Further integration and submission review remain for Sunday and Monday.
+
+## 11 October 2026 — PC fixes and setup
+
+- Corrected stock-unit conversion and added regression checks for conflicting unit evidence.
+- Improved failed OCR job recovery, cache writes and supplier configuration.
+- Added the Windows launcher, pinned setup dependencies and installer recovery for incomplete attempts, missing runtime files and restart-required outcomes.
+- The operator confirmed the PC app works through installer v7. Field review has found unresolved invoice parsing and quantity issues; installation success does not establish output accuracy or a completed phone-to-export trial.
+- Published the locally developed fixes with their tests. The release replay passed 289 Python tests, including controlled Windows installer scenarios; those scenarios do not replace clean-machine testing.
+- Clarified repository publication history and excluded local data and generated files from routine Git additions.

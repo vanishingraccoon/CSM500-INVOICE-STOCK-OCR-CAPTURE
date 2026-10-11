@@ -41,7 +41,7 @@ Every figure for the results chapter is in `data/out/results/results.md`, with t
 
 ## Laptop server and portal
 
-The always-on store laptop receives photographs from the Android app (`../invoice-app-android`) over the office Wi-Fi, reads them in the background, and serves the office portal. The phone API is `docs/phone-api.md`, the contract both sides implement.
+The always-on store laptop receives photographs from the Android app (`../android`) over the office Wi-Fi, reads them in the background, and serves the office portal. The phone API is `docs/phone-api.md`, the contract both sides implement.
 
 ```bash
 .venv/Scripts/python -m app.serve                        # this laptop only: http://127.0.0.1:5000
@@ -113,7 +113,7 @@ Anyone who can reach it can see the invoice photographs.
 |---|---|
 | `ingest/` | Extracts page images, identifies supplier, document number and date, and groups pages into invoices on positive evidence only. |
 | `ocr/` | PaddleOCR and Tesseract behind one interface returning word boxes, with a disk cache and a parallel runner. |
-| `parser/` | One table engine. Supplier layouts are data (`layouts.py`), not code. It reconciles quantity × price against the line total, and records rather than corrects invoices that do not add up. |
+| `parser/` | One table engine. Supplier layouts are data (`layouts.py`), not code. It reconciles quantity Ãƒ— price against the line total, and records rather than corrects invoices that do not add up. |
 | `normaliser/` | Reads base units out of Pilot item names, scores stock-item matches (alias, supplier history, text), and converts or refuses with a category and a reason. |
 | `checks/` | Duplicate invoices, and price anomalies against each item's median, classified (unit error, case keyed as units, transposed, placeholder item). |
 | `tools/` | Loads Pilot exports, and ties scanned invoices to Pilot entries by reference, falling back to total and date. |
@@ -133,13 +133,13 @@ Anyone who can reach it can see the invoice photographs.
 Two open-source libraries were tried against the real binder in a separate environment (`.venv-trial`). Neither was adopted. Scripts are in `eval/trials/`; results are in `data/trials/` and in the results report.
 
 **page-dewarp** (MIT, <https://github.com/lmmx/page-dewarp>) flattens a curved page photograph before recognition.
-- **With Tesseract:** it rescued two near-unreadable pages (p080: 5 words recognised → 159). It lowered confidence on three of the eight worst pages by 17–21 points and on all three control pages by 2–8 points, and failed on one page.
+- **With Tesseract:** it rescued two near-unreadable pages (p080: 5 words recognised Ã¢â€ â€™ 159). It lowered confidence on three of the eight worst pages by 17Ã¢â‚¬â€œ21 points and on all three control pages by 2Ã¢â‚¬â€œ8 points, and failed on one page.
 - **With PaddleOCR, the engine the pipeline uses:** every flattened page read worse. p080 went from 130 words at 77.9 confidence to 92 words at 59.5; p151 from 37 at 70.8 to 28 at 54.0; p101 from 34 at 52.5 to 35 at 50.7.
 - **Why:** flattening also thresholds the image to black and white, which discards detail that PaddleOCR uses.
 
 **img2table** (MIT, <https://github.com/xavctn/img2table>) detects table structure from ruled lines and text alignment.
 - **Result:** on 12 invoices whose parsed line count differs from Pilot's, its largest table was never closer to Pilot's line count than our parser was.
-- **Why:** most of these tables have no ruled borders and the photographs overlap, so it found only fragments of 2–24 rows.
+- **Why:** most of these tables have no ruled borders and the photographs overlap, so it found only fragments of 2Ã¢â‚¬â€œ24 rows.
 
 Also reviewed and cited as related work rather than used:
 - **invoice2data:** regex templates over PDF text, the closest existing approach to layouts-as-data.
@@ -147,3 +147,19 @@ Also reviewed and cited as related work rather than used:
 - **docTR:** a deep-learning OCR engine.
 - **Table Transformer:** deep-learning table detection.
 - **quantulum3** and **ingredient-parser:** extracting quantities and units from text.
+
+## Windows launcher and a clean Eastgate trial
+
+Install Python 3.12 with Tcl/Tk and the Python launcher. Copy the source folders to the independent laptop; create its environment there rather than copying `.venv`. Run `setup.ps1` once. It installs the core requirements and the pinned PaddleOCR/Paddle versions in `requirements-ocr.txt`. First OCR startup needs internet to download the named models; later startups use the model cache. A successful dependency install is not a completed invoice trial.
+
+Double-click `Launch Invoice Server.cmd` or run `launch.ps1`. The desktop window starts the portal/API and readers together, opens the browser after the readers load, and provides Stop, Start, Open portal and Open log. Close the window to stop its server and readers. Stop then Start restarts them. Logs are under the selected app-data folder in `logs/server.log`. If the chosen port is occupied, choose another; the launcher does not stop the other program.
+
+The server listens on the laptop's local network. Pair from `/pair` using the laptop's Wi-Fi address shown there; the laptop browser uses `127.0.0.1`. The phone and laptop must share the office network, and Windows must permit the server on that private network. This launcher does not change firewall rules. Do not close the laptop lid or allow it to sleep during processing.
+
+An isolated case-study run can set `INVOICE_DATA` to a folder containing `pilot/`, and `INVOICE_APP_DATA` to a new app folder. Put `shops.json` in that app folder with only Eastgate and exact baseline export filenames. Keep the trial-week reference report outside `pilot/`. No previous database, device pairing or learned aliases should be copied into the baseline run.
+
+`INVOICE_SUPPLIERS_FILE` optionally points to a JSON list of additional supplier identities (`key`, `pilot_name`, `aliases`, optional `goods`). Empty aliases mean manual supplier identification; they do not teach OCR to recognise the supplier. Duplicate identities and empty aliases are rejected. Set this variable before starting the launcher so the server and readers load the same registry.
+
+A shop's optional `history_days` limits Pilot prices to that many days ending at the latest date in its selected purchase export. Supplier/product matching still uses the full export. The Eastgate trial preparation uses 90 days. Broad supplier history is not permission to infer missing pack sizes.
+
+Stock units retain their actual export scale: 10 kg for an item held in GRAM exports 10,000 g. Fixed-size stock units reject incompatible invoice dimensions, convert explicit volume/count columns and refuse unknown container quantities. Cache publication is atomic; incomplete entries are re-read by the engine. Terminal stale jobs rebuild the batch into Retake.

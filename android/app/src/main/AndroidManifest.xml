@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-    <!-- The laptop server on the office Wi-Fi. No camera permission is needed: the Google
-         document scanner and code scanner run their own camera UI inside Play services. -->
+    <!-- Capture delegates to Play services or the phone's camera app; neither needs this
+         app to request camera permission. The laptop server is reached over office Wi-Fi. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
@@ -27,6 +27,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <provider
+            android:name=".ui.components.CaptureFileProvider"
+            android:authorities="${applicationId}.capture-files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/capture_paths" />
+        </provider>
 
         <!-- Ask Play services to download the QR code scanner module when the app is installed,
              so pairing works the first time it is opened. -->

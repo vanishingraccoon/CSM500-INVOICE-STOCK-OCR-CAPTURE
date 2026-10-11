@@ -15,6 +15,7 @@ import argparse
 import logging
 import secrets
 import sys
+import threading
 
 from app import context, db, pairing, storage, worker
 from app.settings import Settings, configure
@@ -39,29 +40,46 @@ def main(argv=None) -> int:
 
     settings = Settings.from_env()
     changes = {k: v for k, v in (("host", args.host), ("port", args.port), ("workers", args.workers)) if v is not None}
-    settings = configure(settings.with_(**changes) if changes else settings).ensure_dirs()
+    return run(settings.with_(**changes) if changes else settings)
+
+
+def run(settings: Settings, stop=None, ready=None) -> int:
+    """Serve until interrupted or the owning launcher's stop event is set."""
+    from werkzeug.serving import make_server
+
+    settings = configure(settings).ensure_dirs()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
     log = logging.getLogger("invoice.serve")
 
+    from app.server import app
+    server = make_server(settings.host, settings.port, app, threaded=True)
     run_id = secrets.token_hex(4)
     found = recover(settings, run_id)
     log.info("data in %s; %d photograph(s) put back in the queue, %d temporary file(s) removed",
              settings.app_data, found["requeued"], found["temp_files_removed"])
 
     pool = worker.WorkerPool(settings, settings.workers, run_id)
-    pool.start()
-    from app.server import app
     log.info("portal on http://%s:%d/ ; phones pair at /pair and use %s", settings.host, settings.port,
              pairing.server_url(settings))
     if settings.host in ("127.0.0.1", "localhost"):
         log.info("listening on this laptop only; set INVOICE_HOST=0.0.0.0 for the phones on the office Wi-Fi")
     try:
-        app.run(host=settings.host, port=settings.port, threaded=True, use_reloader=False, debug=False)
+        pool.start()
+        pool.wait_ready(cancelled=stop)
+        if ready is not None:
+            ready.put({"status": "ready", "url": f"http://127.0.0.1:{settings.port}/"})
+        if stop is not None:
+            def wait_for_stop():
+                stop.wait()
+                server.shutdown()
+            threading.Thread(target=wait_for_stop, name="server-stop", daemon=True).start()
+        server.serve_forever()
     except KeyboardInterrupt:
         pass
     finally:
         log.info("stopping the readers")
         pool.shutdown()
+        server.server_close()
         conn = context.connection()
         with db.transaction(conn):
             db.event(conn, "server_stopped", run_id=run_id)

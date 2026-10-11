@@ -133,8 +133,8 @@ def find_price_anomalies(points: Iterable[PricePoint], history: Iterable[PricePo
                               {"item": name, "quantity": p.quantity, "cost": p.cost}))
             continue
         up = p.unit_price
-        if up is None or up < 0:
-            # zero quantity and sign errors need no baseline
+        if up is None or up <= 0:
+            # Zero prices never enter the positive baseline; quantity/sign checks still apply.
             f = classify(p, 0.0)
             if f:
                 flags.append(f)

@@ -3,6 +3,7 @@
 import time
 
 import numpy as np
+import pytest
 from serverkit import OWNER, invoice_words, photo_bytes, sha
 
 from app import context, db, quality, worker
@@ -56,6 +57,26 @@ def test_startup_puts_back_jobs_held_by_readers_of_an_earlier_run(phone):
     worker.claim(conn, "oldrun:laptop:99:r0", lease=600)
     assert worker.requeue_stale(conn, run_id="newrun") == 1
     assert db.one(conn, "SELECT status FROM jobs")["status"] == "queued"
+
+
+@pytest.mark.parametrize("recovery", ["lease", "startup"])
+def test_exhausted_crash_recovery_rebuilds_retake_without_another_job(phone, monkeypatch, recovery):
+    batch_id = phone.new_batch(pages=1)
+    phone.upload(batch_id, "crashing-photo", photo_bytes(93), ordinal=1)
+    phone.post(f"/api/v1/batches/{batch_id}/complete")
+    conn = context.connection()
+    clock = [time.time()]
+    monkeypatch.setattr(db, "now", lambda: clock[0])
+    for attempt in range(worker.MAX_ATTEMPTS):
+        assert worker.claim(conn, OWNER, lease=1).attempts == attempt + 1
+        clock[0] += 2
+    if recovery == "startup":
+        assert worker.requeue_stale(conn, run_id="newrun") == 1
+    assert worker.claim(conn, OWNER) is None
+    batch = phone.batch(batch_id)
+    assert batch["progress"]["failed"] == 1
+    assert [inv["tab"] for inv in batch["invoices"]] == ["retake"]
+    assert worker.requeue_stale(conn) == 0
 
 
 def test_a_photograph_replaced_before_it_was_read_is_never_read(phone, reader):

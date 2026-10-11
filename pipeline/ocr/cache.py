@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import tempfile
 from pathlib import Path
 
 import config
@@ -39,14 +41,34 @@ class CachedOCR:
     def recognise(self, image_path: Path, crop: tuple[int, int, int, int] | None = None,
                   psm: int = 3, refresh: bool = False) -> OCRResult:
         key = self._key(Path(image_path), crop, psm)
-        if key.exists() and not refresh:
-            return OCRResult.from_dict(json.loads(key.read_text(encoding="utf-8")))
+        if not refresh:
+            cached = self._read(key)
+            if cached is not None:
+                return cached
         result = self.engine.recognise(Path(image_path), crop=crop, psm=psm)
-        key.write_text(json.dumps(result.to_dict()), encoding="utf-8")
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=self.dir,
+                                             suffix=".tmp", delete=False) as stream:
+                temporary = Path(stream.name)
+                json.dump(result.to_dict(), stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, key)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
         return result
 
+    @staticmethod
+    def _read(path: Path) -> OCRResult | None:
+        try:
+            return OCRResult.from_dict(json.loads(path.read_text(encoding="utf-8")))
+        except (FileNotFoundError, UnicodeError, ValueError, TypeError, KeyError, AttributeError):
+            return None
+
     def cached(self, image_path: Path, crop=None, psm: int = 3) -> bool:
-        return self._key(Path(image_path), crop, psm).exists()
+        return self._read(self._key(Path(image_path), crop, psm)) is not None
 
     def cache_file(self, image_path: Path, crop=None, psm: int = 3) -> Path:
         """Where the result for this image is stored, so a record can point at it instead of copying it."""

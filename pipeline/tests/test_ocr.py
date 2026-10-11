@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from models import OCRResult, Word
 from ocr.tesseract import parse_tsv
 
@@ -55,8 +57,63 @@ def test_batch_recognition_skips_pages_already_cached(tmp_path):
     a.write_bytes(b"page a")
     b.write_bytes(b"page b")
     ocr = CachedOCR(PaddleEngine(), tmp_path / "cache")
-    ocr._key(a, None, 3).write_text("{}", encoding="utf-8")
+    result = OCRResult(str(a), "paddle", "test", 0, 100, 200, [])
+    ocr._key(a, None, 3).write_text(json.dumps(result.to_dict()), encoding="utf-8")
     assert pages_to_do([a, b], ocr) == [b]
+
+
+@pytest.mark.parametrize("broken", ["{", "{}", "null", '{"words": [null]}'])
+def test_invalid_cache_is_recognised_again_and_replaced(tmp_path, broken):
+    from ocr.cache import CachedOCR
+
+    class Engine:
+        name = "test"
+        calls = 0
+
+        def cache_tag(self):
+            return ""
+
+        def recognise(self, path, **kwargs):
+            self.calls += 1
+            return OCRResult(str(path), self.name, "test", 0, 100, 200, [])
+
+    image = tmp_path / "page.jpg"
+    image.write_bytes(b"image")
+    engine = Engine()
+    cache = CachedOCR(engine, tmp_path / "cache")
+    cache.cache_file(image).write_text(broken, encoding="utf-8")
+    assert not cache.cached(image)
+    result = cache.recognise(image)
+    assert cache.recognise(image) == result and engine.calls == 1
+    assert cache.cached(image) and not list(cache.dir.glob("*.tmp"))
+
+
+def test_failed_cache_replace_preserves_the_previous_result(tmp_path, monkeypatch):
+    from ocr import cache as module
+
+    class Engine:
+        name = "test"
+
+        def cache_tag(self):
+            return ""
+
+        def recognise(self, path, **kwargs):
+            return OCRResult(str(path), self.name, "test", 0, 100, 200, [])
+
+    image = tmp_path / "page.jpg"
+    image.write_bytes(b"image")
+    cache = module.CachedOCR(Engine(), tmp_path / "cache")
+    result = cache.recognise(image)
+    original = cache.cache_file(image).read_bytes()
+
+    def interrupted(*args):
+        raise OSError("simulated interrupted publish")
+
+    monkeypatch.setattr(module.os, "replace", interrupted)
+    with pytest.raises(OSError):
+        cache.recognise(image, refresh=True)
+    assert cache.cache_file(image).read_bytes() == original
+    assert cache.recognise(image) == result and not list(cache.dir.glob("*.tmp"))
 
 
 def test_ocr_result_round_trips_through_json():

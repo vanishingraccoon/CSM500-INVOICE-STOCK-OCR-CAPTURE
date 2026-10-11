@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import multiprocessing
 import os
+import queue
 import socket
 import sqlite3
 import threading
@@ -62,7 +63,7 @@ def _requeue(conn: sqlite3.Connection, row: dict, why: str) -> None:
     db.bump_revision(conn, row["batch_id"])
 
 
-def requeue_stale(conn: sqlite3.Connection, run_id: str | None = None) -> int:
+def requeue_stale(conn: sqlite3.Connection, run_id: str | None = None, keys=None) -> int:
     """Put back running jobs whose lease expired, and (at startup) those held by readers of an earlier run."""
     with db.transaction(conn):
         rows = db.all_rows(conn, "SELECT j.*, p.batch_id FROM jobs j JOIN photos p ON p.photo_id = j.photo_id"
@@ -71,11 +72,18 @@ def requeue_stale(conn: sqlite3.Connection, run_id: str | None = None) -> int:
         for row in rows:
             expired = row["lease_until"] is not None and row["lease_until"] < db.now()
             _requeue(conn, row, "lease expired" if expired else "reader of an earlier run")
+    failed_batches = {row["batch_id"] for row in rows if row["attempts"] >= MAX_ATTEMPTS}
+    if failed_batches:
+        if keys is None:
+            from app import context
+            keys = context.keys()
+        for batch_id in failed_batches:
+            rebuild_quietly(conn, keys, batch_id)
     return len(rows)
 
 
-def claim(conn: sqlite3.Connection, owner: str, lease: float = LEASE_SECONDS) -> Job | None:
-    requeue_stale(conn)
+def claim(conn: sqlite3.Connection, owner: str, lease: float = LEASE_SECONDS, keys=None) -> Job | None:
+    requeue_stale(conn, keys=keys)
     with db.transaction(conn):
         while True:
             row = db.one(conn, "SELECT j.job_id, j.photo_id, j.attempts, p.batch_id, p.storage_path, p.state, b.shop_id"
@@ -243,7 +251,7 @@ def process(conn: sqlite3.Connection, settings: Settings, keys, ocr, job: Job, o
 
 
 def run_once(conn: sqlite3.Connection, settings: Settings, keys, ocr, owner: str) -> str | None:
-    job = claim(conn, owner)
+    job = claim(conn, owner, keys=keys)
     return None if job is None else process(conn, settings, keys, ocr, job, owner)
 
 
@@ -266,7 +274,7 @@ def make_ocr(settings: Settings):
     return ocr
 
 
-def worker_main(settings: Settings, index: int, run_id: str, stop, threads: int) -> None:
+def worker_main(settings: Settings, index: int, run_id: str, stop, threads: int, status=None) -> None:
     """Entry point of one reader process."""
     os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
     os.environ["OMP_NUM_THREADS"] = str(threads)
@@ -276,10 +284,19 @@ def worker_main(settings: Settings, index: int, run_id: str, stop, threads: int)
     conn = db.connection(settings.db_path)
     owner = f"{run_id}:{socket.gethostname()}:{os.getpid()}:r{index}"
     log.info("loading the recognition engine")
-    ocr = make_ocr(settings)
+    try:
+        ocr = make_ocr(settings)
+    except Exception as error:
+        if status is not None:
+            status.put({"index": index, "error": f"{type(error).__name__}: {error}"})
+        log.exception("recognition engine could not start")
+        db.close_all()
+        return
     keys = Keys(settings)
     parent = multiprocessing.parent_process()
     log.info("ready")
+    if status is not None:
+        status.put({"index": index})
     try:
         while not stop.is_set():
             if parent is not None and not parent.is_alive():
@@ -299,20 +316,40 @@ class WorkerPool:
         self.settings, self.count, self.run_id = settings, count, run_id
         self.ctx = multiprocessing.get_context("spawn")
         self.stop = self.ctx.Event()
+        self.status = self.ctx.Queue()
         self.procs: list = []
         self._watcher: threading.Thread | None = None
 
     def _spawn(self, index: int):
         threads = max(1, (os.cpu_count() or 4) // self.count)
-        p = self.ctx.Process(target=worker_main, args=(self.settings, index, self.run_id, self.stop, threads),
+        p = self.ctx.Process(target=worker_main, args=(self.settings, index, self.run_id, self.stop, threads, self.status),
                              name=f"reader-{index}")
         p.start()
         return p
 
     def start(self) -> None:
-        self.procs = [self._spawn(i) for i in range(self.count)]
+        self.procs = []
+        for i in range(self.count):
+            self.procs.append(self._spawn(i))
         self._watcher = threading.Thread(target=self._watch, name="reader-watch", daemon=True)
         self._watcher.start()
+
+    def wait_ready(self, cancelled=None, timeout: float = 300.0) -> None:
+        """Do not announce readiness until every reader has loaded its engine."""
+        ready = set()
+        deadline = time.monotonic() + timeout
+        while len(ready) < self.count:
+            if cancelled is not None and cancelled.is_set():
+                raise KeyboardInterrupt
+            if time.monotonic() >= deadline:
+                raise RuntimeError("OCR readers did not become ready within five minutes")
+            try:
+                message = self.status.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if "error" in message:
+                raise RuntimeError(f"OCR reader {message['index']} failed: {message['error']}")
+            ready.add(message["index"])
 
     def _watch(self) -> None:
         while not self.stop.wait(5.0):

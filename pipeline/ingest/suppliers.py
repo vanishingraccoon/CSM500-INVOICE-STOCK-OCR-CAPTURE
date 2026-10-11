@@ -12,6 +12,9 @@ any supplier whose name shares them.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import json
+import os
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -56,6 +59,28 @@ SUPPLIERS: tuple[Supplier, ...] = (
     Supplier("master_locksmith", "MASTER LOCKSMITH", ("master locksmith",), goods=False),
     Supplier("shell", "Shell", ("shell",), goods=False),
 )
+
+def load_additional_suppliers(path: Path, existing: tuple[Supplier, ...]) -> tuple[Supplier, ...]:
+    """Add configured identities; empty aliases require a manager to identify the supplier."""
+    rows = json.loads(path.read_text(encoding="utf-8"))
+    keys = {s.key for s in existing}
+    names = {s.pilot_name.strip().casefold() for s in existing}
+    added = []
+    for row in rows:
+        key, name = row["key"], row["pilot_name"].strip()
+        if not key or not name or key in keys or name.casefold() in names:
+            raise ValueError(f"duplicate or empty supplier identity: {key!r}, {name!r}")
+        aliases = tuple(row.get("aliases", ()))
+        if any(not isinstance(alias, str) or not alias.strip() for alias in aliases):
+            raise ValueError(f"invalid aliases for {key}")
+        added.append(Supplier(key, name, aliases, goods=row.get("goods", True)))
+        keys.add(key)
+        names.add(name.casefold())
+    return existing + tuple(added)
+
+
+if os.environ.get("INVOICE_SUPPLIERS_FILE"):
+    SUPPLIERS = load_additional_suppliers(Path(os.environ["INVOICE_SUPPLIERS_FILE"]), SUPPLIERS)
 
 BY_KEY = {s.key: s for s in SUPPLIERS}
 BY_PILOT_NAME = {s.pilot_name.lower(): s for s in SUPPLIERS}

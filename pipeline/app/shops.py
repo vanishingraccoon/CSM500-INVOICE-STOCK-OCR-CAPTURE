@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from datetime import date, timedelta
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -44,6 +45,7 @@ class Shop:
     name: str
     stock_glob: str                          # Pilot Stock Valuation export; the latest file wins
     purchases_glob: str | None = None     # Pilot Purchasing Report, when the shop has one
+    history_days: int | None = None       # recent price window; supplier/product history remains complete
 
 
 DEFAULT_SHOPS: tuple[Shop, ...] = (
@@ -180,10 +182,18 @@ class Keys:
         from tools.pilot import load_purchasing_report
         stock = load_stock(stock_file)
         purchases = load_purchasing_report(purchases_file) if purchases_file else []
+        recent = purchases
+        if shop.history_days is not None:
+            if shop.history_days < 1:
+                raise ValueError("history_days must be positive")
+            if purchases:
+                end = max(date.fromisoformat(line.date) for line in purchases)
+                start = end - timedelta(days=shop.history_days - 1)
+                recent = [line for line in purchases if date.fromisoformat(line.date) >= start]
         matcher = Matcher(stock, history_from_purchases(purchases, stock),
                           aliases=build_aliases(learned_pairs(conn, shop.shop_id)))
-        history = history_points(purchases, stock) + submitted_price_points(conn, shop.shop_id)
-        return ShopKey(shop, stock_file, purchases_file, stock, matcher, price_medians(purchases, stock), history,
+        history = history_points(recent, stock) + submitted_price_points(conn, shop.shop_id)
+        return ShopKey(shop, stock_file, purchases_file, stock, matcher, price_medians(recent, stock), history,
                        purchase_lines=len(purchases))
 
     def forget(self, shop_id: str | None = None) -> None:

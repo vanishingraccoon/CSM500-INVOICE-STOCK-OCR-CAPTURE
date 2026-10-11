@@ -303,3 +303,54 @@ def test_stray_figure_without_wording_or_total_is_not_a_line():
     rec = parse_invoice([page(words, "vassco")])
     assert [l.quantity for l in rec.lines] == [2, 3]
     assert any("read as figures and ignored" in w for w in rec.warnings)
+
+
+def test_tall_description_box_does_not_join_an_earlier_watermark_row():
+    from parser.geometry import group_rows
+    words = [W("STAMP", 150, 190, 149, h=32),
+             W("Pork", 432, 477, 165, h=54), W("Ribs", 495, 555, 165, h=54),
+             W("4.00", 1105, 1165, 180, h=33), W("Each", 1228, 1288, 179, h=33),
+             W("20.00", 1450, 1520, 180, h=33), W("80.00", 1900, 1970, 180, h=33)]
+    rows = group_rows(words, skew=0)
+    assert [[w.text for w in row] for row in rows] == [
+        ["STAMP"], ["Pork", "Ribs", "4.00", "Each", "20.00", "80.00"]]
+
+
+def test_unavailable_stock_notes_do_not_extend_a_delivered_product():
+    words = [W("Description", 300, 450, 100), W("Qty", 900, 940, 100),
+             W("Price", 1100, 1170, 100), W("Total", 1500, 1570, 100),
+             W("Sauce (5L)", 300, 480, 160), W("2", 915, 925, 160),
+             W("10.00", 1110, 1170, 160), W("20.00", 1500, 1570, 160),
+             W("STAMP", 100, 180, 220), W("No", 300, 340, 220), W("Stock", 350, 410, 220),
+             W("2 x Frozen berries (1Kg)", 300, 650, 270)]
+    rec = parse_invoice([page(words, "fournews_logistics")])
+    assert len(rec.lines) == 1 and rec.lines[0].description == "Sauce (5L)"
+
+
+def test_vassco_split_totals_skip_quantity_and_read_vat_after_standard_rate():
+    words = [W("Description", 300, 450, 100), W("Qty", 900, 940, 100),
+             W("Price", 1100, 1170, 100), W("VAT", 1300, 1360, 100), W("Total", 1500, 1570, 100),
+             W("Goods", 300, 400, 160), W("2", 915, 925, 160), W("50.00", 1110, 1170, 160),
+             W("15.00", 1300, 1360, 160), W("115.00", 1500, 1570, 160),
+             W("Totals", 300, 400, 300), W("2.00", 900, 950, 300),
+             W("100.00", 1100, 1200, 335), W("15.00", 1300, 1360, 335),
+             W("Standard", 100, 220, 400), W("Rate:", 230, 290, 400), W("15.00", 300, 370, 400),
+             W("Total", 400, 460, 400), W("VAT:", 470, 530, 400), W("15.00", 550, 620, 400)]
+    rec = parse_invoice([page(words, "vassco")])
+    assert (rec.stated_total_excl, rec.stated_vat, rec.stated_total_incl) == (100, 15, 115)
+    assert rec.adds_up is True
+
+
+def test_split_total_is_not_exported_as_an_extra_product():
+    words = [W("Description", 300, 450, 100), W("Qty", 900, 940, 100),
+             W("Price", 1100, 1170, 100), W("VAT", 1300, 1360, 100), W("Total", 1500, 1570, 100),
+             W("Goods", 300, 400, 160), W("2", 915, 925, 160), W("50.00", 1110, 1170, 160),
+             W("15.00", 1300, 1360, 160), W("115.00", 1500, 1570, 185)]
+    rec = parse_invoice([page(words, "vassco")])
+    assert len(rec.lines) == 1
+    assert (rec.lines[0].quantity, rec.lines[0].line_total) == (2, 100)
+
+
+def test_vassco_second_page_without_first_page_has_a_warning():
+    rec = parse_invoice([page([W("Pg.", 1400, 1450, 100), W("2", 1460, 1480, 100)], "vassco")])
+    assert any("first page is missing" in w for w in rec.warnings)

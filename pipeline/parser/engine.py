@@ -28,7 +28,7 @@ from rapidfuzz.distance import Levenshtein
 
 from models import InvoiceRecord, Line, OCRResult, Page, Word
 from normaliser.units import parse_pack
-from parser.geometry import group_rows, row_bottom, row_text, row_top, typical_height
+from parser.geometry import SKEW_LIMIT, SKEW_STEP, group_rows, row_bottom, row_text, row_top, typical_height
 from parser.layouts import (
     FOOTER_WORDS,
     MONEY_FIELDS,
@@ -241,9 +241,12 @@ def split_totals_row(values: list[float]) -> dict[str, float]:
     return {"incl": values[-1]}
 
 
-def read_totals(rows: list[list[Word]], height: float) -> dict[str, float]:
+def read_totals(rows: list[list[Word]], height: float, layout: Layout | None = None) -> dict[str, float]:
     found: dict[str, float] = {}
     for row in rows:
+        if len(row) > 2 and _norm(row[0].text) == "standard" and _norm(row[1].text) == "rate":
+            start = next((i for i, w in enumerate(row) if _norm(w.text) == "total"), len(row))
+            row = row[start:]
         hit = find_totals_label(row)
         if hit is None:
             continue
@@ -254,7 +257,12 @@ def read_totals(rows: list[list[Word]], height: float) -> dict[str, float]:
         if not values:
             continue
         if kind == "row":
-            for k, v in split_totals_row(values).items():
+            resolved = split_totals_row(values)
+            if layout and layout.key == "vassco" and (
+                    not all(k in resolved for k in ("excl", "vat", "incl"))
+                    or abs(resolved["excl"] + resolved["vat"] - resolved["incl"]) > 0.05):
+                continue  # quantity-first totals must not become an invoice amount
+            for k, v in resolved.items():
                 found.setdefault(k, v)
         else:
             found.setdefault(kind, values[-1])
@@ -563,13 +571,86 @@ def parse_page(ocr: OCRResult, layout: Layout) -> tuple[list[tuple[Line, list[st
     spans, last_header_row = header
     bounds = column_bounds(spans)
     body = rows[last_header_row + 1:]
+    body_words = [w for row in body for w in row]
+    stops = [w.top for w in body_words if _norm(w.text) == "totals"]
+    # Unavailable products below Fournews' table are notes, not delivered stock.
+    for row in body:
+        if re.search(r"\bno stock\b", row_text(row).lower()):
+            stops.append(row_top(row))
+    stop = min(stops) if stops else float("inf")
+    table_words = [w for w in body_words if w.cy < stop]
+    table_rows = group_rows(table_words, height_limit=height)
+    raws, loose, end = _walk_table(table_rows, bounds, height)
 
-    raws, loose, end = _walk_table(body, bounds, height)
+    def alignment_score(candidate: list[RawLine]) -> tuple[int, int]:
+        complete = 0
+        incomplete = 0
+        for raw in candidate:
+            cells = raw.cells
+            has_description = bool(cells.get("description"))
+            has_price = _cell(cells.get("unit_price", []), height)[0] is not None
+            has_total = any(_cell(cells.get(f, []), height)[0] is not None
+                            for f in ("line_total", "line_total_excl", "line_total_incl"))
+            line, notes = build_line(raw, height, layout)
+            complete += (has_description and has_price and has_total and line.quantity is not None
+                         and not any("does not reconcile" in n for n in notes))
+            incomplete += not has_description or not has_total
+        return complete, -incomplete
+
+    # Perspective can tilt the table differently from the letterhead. Prefer fuller
+    # rows whose figures reconcile; never change figures to match the invoice total.
+    score = alignment_score(raws)
+    if loose or score[1] < 0:
+        steps = round(2 * SKEW_LIMIT / SKEW_STEP)
+        for k in range(steps + 1):
+            skew = round(-SKEW_LIMIT + k * SKEW_STEP, 4)
+            candidate_rows = group_rows(table_words, skew=skew, height_limit=height)
+            candidate, candidate_loose, candidate_end = _walk_table(candidate_rows, bounds, height)
+            candidate_score = alignment_score(candidate)
+            if candidate_score[0] > score[0]:
+                score = candidate_score
+                raws, loose, end = candidate, candidate_loose, candidate_end
+                table_rows = candidate_rows
+    joined: list[RawLine] = []
+    for raw in raws:
+        if joined and not any(raw.cells.get(f) for f in ("description", "code", "quantity", "unit_price")):
+            previous = joined[-1]
+            if abs(raw.top - previous.top) <= height and not any(
+                    previous.cells.get(f) for f in raw.cells):
+                candidate = RawLine({**previous.cells, **raw.cells}, previous.top,
+                                    max(previous.bottom, raw.bottom), previous.extra_description)
+                line, notes = build_line(candidate, height, layout)
+                if line.quantity is not None and line.unit_price is not None and line.line_total is not None \
+                        and not any("does not reconcile" in n for n in notes):
+                    joined[-1] = candidate
+                    warnings.append("split line figures rejoined only after quantity and price reconciled")
+                    continue
+        joined.append(raw)
+    raws = joined
     _attach_descriptions(raws, loose, layout)
     kept, dropped = _drop_stray_rows([build_line(raw, height, layout) for raw in raws])
     if dropped:
         warnings.append(f"{dropped} row(s) outside the table read as figures and ignored")
-    totals = read_totals(body[end:], height) or read_totals(body, height)
+    totals = read_totals(body, height, layout)
+    if layout.key == "vassco":
+        labels = [w for w in body_words if _norm(w.text) == "totals"]
+        total_column = next((lo for fld, lo, hi in bounds if fld == "line_total"), float("inf"))
+        for label in labels:
+            # The quantity, subtotal and VAT can be split into separate OCR rows.
+            figures = [(w.cx, parse_amount(w.text)) for w in body_words
+                       if label.right < w.cx < total_column
+                       and -0.5 * height <= w.cy - label.cy < 2 * height
+                       and re.search(r"\d[.,]\d{1,2}\b", w.text)]
+            figures = [v for _, v in sorted(figures) if v is not None and v > 0]
+            if "excl" not in totals and "vat" in totals and len(figures) >= 2:
+                # Skip the quantity, regardless of its size. If VAT is the last figure,
+                # the preceding figure is the subtotal even when quantity was not read.
+                subtotal = figures[-2] if abs(figures[-1] - totals["vat"]) <= 0.02 else figures[1]
+                if subtotal >= totals["vat"]:
+                    totals["excl"] = subtotal
+        if "excl" in totals and "vat" in totals and "incl" not in totals:
+            totals["incl"] = round(totals["excl"] + totals["vat"], 2)
+            warnings.append("total incl. VAT unreadable: derived from subtotal plus stated VAT")
     return kept, totals, warnings
 
 
@@ -612,6 +693,12 @@ def parse_invoice(pages: list[tuple[Page, OCRResult | None]], layout: Layout | N
     first = pages[0][0]
     layout = layout or for_supplier(first.supplier)
     warnings: list[str] = []
+
+    if layout.key == "vassco":
+        printed_pages = [int(m.group(1)) for _, ocr in pages if ocr is not None
+                         for m in re.finditer(r"\bp[ga]\s*[.:]\s*(\d+)\b", ocr.text, re.IGNORECASE)]
+        if printed_pages and min(printed_pages) > 1:
+            warnings.append("printed invoice starts after page 1: the first page is missing; check the original invoice")
 
     parsed: list[tuple[Page, list, dict, list[str]]] = []
     for page, ocr in pages:

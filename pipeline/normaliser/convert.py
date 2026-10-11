@@ -15,6 +15,7 @@ own price history, or refuses.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from models import Line, Refusal
@@ -69,6 +70,10 @@ def convert(line: Line, item: StockItem, median_price: float | None = None) -> C
                        + (f" ('{base.raw}')" if base.raw else ""))
 
     pack: Pack | None = parse_pack(line.description)
+    if pack is None and re.search(r"\d+\s*[x\u00d7*]\s*\d*[oO]\d*\s*(?:ml|cl|kg|g|l)\b",
+                                  line.description, re.IGNORECASE):
+        return _refuse(Refusal.PACK_NOTATION_ABSENT,
+                       "the multipack size contains unreadable digits; confirm the pack size before conversion")
     column = unit_from_column(line.unit)
     fractional = abs(line.quantity - round(line.quantity)) > 1e-9
 

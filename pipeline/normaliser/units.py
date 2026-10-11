@@ -102,11 +102,11 @@ class Pack:
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
 _UNIT = r"(kg|kgs|kilo|g|gr|grm|gram|grams|ml|cl|l|lt|ltr|litre|liter|litres|m|meter|metre)"
-MULTI_RE = re.compile(rf"(?<![\w.]){_NUM}\s*[xÃ—\*]\s*{_NUM}\s*{_UNIT}\b", re.IGNORECASE)            # 24x330ml, 2 x 12.5kg
-SINGLE_RE = re.compile(rf"(?<![\w.]){_NUM}\s*{_UNIT}\b", re.IGNORECASE)                            # 750ml, 5 kg
+MULTI_RE = re.compile(rf"(?<![\d.]){_NUM}\s*[x\u00d7\*]\s*{_NUM}\s*{_UNIT}(?=\b|nrb(?:\d+)?\b|nrr(?:\d+)?\b|shr\b)", re.IGNORECASE)            # 24x330ml, 2 x 12.5kg
+SINGLE_RE = re.compile(rf"(?<![\d.]){_NUM}\s*{_UNIT}(?=\b|nrb(?:\d+)?\b|nrr(?:\d+)?\b|shr\b)", re.IGNORECASE)                            # 750ml, 5 kg
 COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*(?:'s|s\b|\s*(?:pcs|pc|pieces|units|each|ea|slices|sheets|portions|sachets"
                       r"|sticks|capsules|pods|per\s+(?:case|pack|box)))", re.IGNORECASE)  # 12's, 24 pcs, 40 Slices
-X_COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*[xÃ—]\s*(?=[a-z])", re.IGNORECASE)                    # 6 x A10 (count known, contents not)
+X_COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*[x\u00d7]\s*(?=[a-z])", re.IGNORECASE)                    # 6 x A10 (count known, contents not)
 
 
 def _f(s: str) -> float:

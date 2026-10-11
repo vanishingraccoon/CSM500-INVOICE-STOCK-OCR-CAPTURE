@@ -26,6 +26,16 @@ STOCK = StockFile("News Cafe - Test", "2026-09-13", [
 BY = STOCK.by_code()
 
 
+def test_numeric_product_qualifiers_survive_pack_removal():
+    assert normalise_text("Heineken 0.0 24x330ml") != normalise_text("Heineken 24x330ml")
+    assert normalise_text("Whisky 12 year 750ml") != normalise_text("Whisky 18 year 750ml")
+
+
+def test_unreadable_multipack_size_cannot_fall_back_to_one_each():
+    c = convert(Line("Beer 24X33OML NRB", quantity=1), item("beer", "beer silver 330ml (EACH)"))
+    assert c.refusal == Refusal.PACK_NOTATION_ABSENT.value
+
+
 def L(desc, q, unit=None, price=None, total=None):
     return Line(description=desc, quantity=q, unit=unit, unit_price=price, line_total=total)
 

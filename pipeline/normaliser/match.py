@@ -23,7 +23,7 @@ from dataclasses import dataclass, field
 from rapidfuzz import fuzz
 
 from normaliser.stock import StockFile, StockItem
-from normaliser.units import MULTI_RE, SINGLE_RE, parse_pack
+from normaliser.units import COUNT_RE, MULTI_RE, SINGLE_RE, parse_pack
 
 HISTORY_BONUS = 12.0
 SIZE_BONUS = 8.0
@@ -38,12 +38,13 @@ def normalise_text(text: str) -> str:
     t = text.lower()
     t = MULTI_RE.sub(" ", t)
     t = SINGLE_RE.sub(" ", t)
+    t = COUNT_RE.sub(" ", t)
     t = t.replace("&", " and ")
     t = re.sub(r"\(\s*\d+\s*'?s\s*\)", " ", t)         # (12's)
     t = re.sub(r"[^a-z0-9 ]+", " ", t)
     words = []
     for w in t.split():
-        if w in STOPWORDS or w.isdigit():
+        if w in STOPWORDS:
             continue
         if len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
             w = w[:-1]

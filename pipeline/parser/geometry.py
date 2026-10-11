@@ -40,18 +40,20 @@ def estimate_skew(words: list[Word]) -> float:
     return float(median(slopes)) if len(slopes) >= MIN_SKEW_PAIRS else 0.0
 
 
-def _group(words: list[Word], skew: float, tolerance: float) -> list[list[Word]]:
+def _group(words: list[Word], skew: float, tolerance: float, height_limit: float | None = None) -> list[list[Word]]:
     def level(w: Word) -> float:
         return w.cy - skew * w.cx
 
     rows: list[list[Word]] = []
     levels: list[float] = []
+    height = height_limit if height_limit is not None else typical_height(words)
     for w in sorted(words, key=lambda w: (level(w), w.left)):
         lw = level(w)
         placed = False
         for k in range(len(rows) - 1, -1, -1):
             ref = rows[k][0]
-            h = max(ref.height, w.height)
+            # A tall OCR box must not pull the next product onto a stamp or watermark row.
+            h = min(max(ref.height, w.height), height)
             if lw - levels[k] > 2 * h:
                 break          # rows further back are further away still
             if abs(lw - levels[k]) < h * tolerance:
@@ -66,7 +68,7 @@ def _group(words: list[Word], skew: float, tolerance: float) -> list[list[Word]]
     return rows
 
 
-def best_skew(words: list[Word], tolerance: float = ROW_TOLERANCE) -> float:
+def best_skew(words: list[Word], tolerance: float = ROW_TOLERANCE, height_limit: float | None = None) -> float:
     """The tilt that lines the words up into the fewest rows.
 
     A single slope estimate can over-correct on a page with stamps and handwriting and split real
@@ -75,7 +77,7 @@ def best_skew(words: list[Word], tolerance: float = ROW_TOLERANCE) -> float:
     """
     if len(words) < 20:
         return 0.0
-    base = len(_group(words, 0.0, tolerance))
+    base = len(_group(words, 0.0, tolerance, height_limit))
     steps = round(2 * SKEW_LIMIT / SKEW_STEP)
     candidates = [round(-SKEW_LIMIT + k * SKEW_STEP, 4) for k in range(steps + 1)]
     est = estimate_skew(words)
@@ -83,21 +85,22 @@ def best_skew(words: list[Word], tolerance: float = ROW_TOLERANCE) -> float:
         candidates.append(round(est, 4))
     best_s, best_n = 0.0, base
     for s in candidates:
-        n = len(_group(words, s, tolerance))
+        n = len(_group(words, s, tolerance, height_limit))
         if n < best_n or (n == best_n and abs(s) < abs(best_s)):
             best_s, best_n = s, n
     return best_s if base - best_n >= max(MIN_ROW_GAIN, MIN_ROW_GAIN_SHARE * base) else 0.0
 
 
-def group_rows(words: list[Word], tolerance: float = ROW_TOLERANCE, skew: float | None = None) -> list[list[Word]]:
+def group_rows(words: list[Word], tolerance: float = ROW_TOLERANCE, skew: float | None = None,
+               height_limit: float | None = None) -> list[list[Word]]:
     """Words grouped into visual rows along the page's tilt, each row sorted left to right.
 
     Rows are built from position alone, not from the engine's own line ids, because engines
     split one printed line into several fragments and occasionally join two.
     """
     if skew is None:
-        skew = best_skew(words, tolerance)
-    return _group(words, skew, tolerance)
+        skew = best_skew(words, tolerance, height_limit)
+    return _group(words, skew, tolerance, height_limit)
 
 
 def row_top(row: list[Word]) -> int:

@@ -51,6 +51,7 @@ TOTAL_LABELS: dict[str, str] = {
     "total due": "incl", "amount due": "incl", "balance due": "incl", "grand total": "incl",
     "totals": "row", "total": "incl",
     "total net": "excl", "net total": "excl",
+    "amount excl tax": "excl",
     # rows that end the table but carry no total of their own
     "total discount": "ignore", "discount": "ignore", "amount paid": "ignore",
 }

@@ -91,3 +91,15 @@ def test_unit_column():
     assert unit_from_column("Dozen") == (COUNT, 12.0)
     assert unit_from_column("PKT") is None
     assert unit_from_column(None) is None
+@pytest.mark.parametrize("text,count,amount", [
+    ("Drink (24 \u00d7 250ml)", 24, 0.25),
+    ("FRUIT RUBYAPPLE24X275ML", 24, 0.275),
+    ("HEINEKEN24X330MLNRR", 24, 0.33),
+    ("SAVANNA DRY24X330MLNRB5", 24, 0.33),
+    ("MINT SYRUP1L", 1, 1),
+])
+def test_pack_notation_with_unicode_multiplier_and_glued_words(text, count, amount):
+    pack = parse_pack(text)
+    assert pack is not None
+    assert pack.count == count and pack.amount == pytest.approx(amount)
+

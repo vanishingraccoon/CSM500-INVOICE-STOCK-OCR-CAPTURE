@@ -6,9 +6,8 @@ Layout: a title line (store name, "Stock Valuation for DD-MM-YYYY"), a blank lin
     BackStock, FrontStock, StockOnHand, UnitCost, Total, Textbox40
 where prod is the stock item code and StockItem the free-text name carrying the base unit.
 
-The table is regenerated from whichever venue's export is given, with no code changes: that
-is the franchise premise under test (stock items standardised estate-wide), and comparing two
-venues' tables measures how far the premise holds.
+The table is regenerated from the supplied venue export. Eastgate is the current
+case study; earlier cross-venue comparisons remain historical evaluation evidence.
 
     python -m normaliser.stock data/pilot/stock_valuation_eastgate_2026-09-13.csv
 """
@@ -116,6 +115,7 @@ class TableEntry:
     content_dimension: str | None
     name_pack: str | None           # pack notation found inside the name itself ("amstel 330ml")
     status: str                        # ok | pack_size_as_unit | base_unit_absent | base_unit_unrecognised
+    scale: float = 1.0                 # canonical amount per stock unit
 
 
 def conversion_table(stock: StockFile) -> list[TableEntry]:
@@ -132,7 +132,7 @@ def conversion_table(stock: StockFile) -> list[TableEntry]:
             status = "ok"
         pack = parse_pack(it.description)
         out.append(TableEntry(it.code, it.description, it.category, b.raw, b.dimension, b.unit,
-                              b.content, b.content_dimension, pack.raw if pack and pack.amount else None, status))
+                              b.content, b.content_dimension, pack.raw if pack and pack.amount else None, status, b.scale))
     return out
 
 

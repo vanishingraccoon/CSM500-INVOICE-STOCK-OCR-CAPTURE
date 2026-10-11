@@ -6,8 +6,8 @@ LITRE 73, METER 4, plus "750ml", "200ML" and one empty "()". So the vocabulary i
 and a suffix like 750ML is a pack size standing in for a unit: the item is counted in
 bottles, each holding 750 ml.
 
-Everything is reduced to a Quantity in one of four dimensions with a canonical unit
-(kg, l, each, m). Conversion is only ever attempted within a dimension. Mass to volume
+Amounts are parsed in canonical units (kg, l, each, m); a stock unit also retains its
+scale so exported quantities use Pilot's actual unit. Conversion stays within a dimension. Mass to volume
 needs a density nobody recorded, so it is refused upstream, never guessed here.
 """
 from __future__ import annotations
@@ -43,9 +43,10 @@ class BaseUnit:
     """A Pilot item's unit of stock, parsed from its name."""
     raw: str                        # suffix as typed, "" if absent
     dimension: str | None        # None when the suffix could not be understood
-    unit: str | None             # canonical unit of the dimension
+    unit: str | None             # unit in which Pilot holds this item
     content: float | None = None  # for pack-size suffixes (750ML): canonical amount per counted unit
     content_dimension: str | None = None
+    scale: float = 1.0           # canonical amount per stock unit
 
     @property
     def known(self) -> bool:
@@ -72,10 +73,10 @@ def parse_base_unit(suffix: str) -> BaseUnit:
         dim, factor = UNIT_WORDS[s]
         if factor == 1.0:
             return BaseUnit(suffix, dim, CANONICAL[dim])
-        # "GRAM" as a base unit: stock is counted in grams; express content per counted unit
-        return BaseUnit(suffix, dim, CANONICAL[dim], content=factor, content_dimension=dim)
+        unit = {MASS: "g", VOLUME: "cl" if factor == 0.01 else "ml", COUNT: "dozen"}[dim]
+        return BaseUnit(suffix, dim, unit, scale=factor)
     m = AMOUNT_UNIT_RE.match(s)
-    if m and m.group(2).lower() in UNIT_WORDS:
+    if m and m.group(2).lower() in UNIT_WORDS and float(m.group(1).replace(",", ".")) > 0:
         amount = float(m.group(1).replace(",", "."))
         dim, factor = UNIT_WORDS[m.group(2).lower()]
         # a pack size used as a unit: the item is counted, each holding this much
@@ -101,11 +102,11 @@ class Pack:
 
 _NUM = r"(\d+(?:[.,]\d+)?)"
 _UNIT = r"(kg|kgs|kilo|g|gr|grm|gram|grams|ml|cl|l|lt|ltr|litre|liter|litres|m|meter|metre)"
-MULTI_RE = re.compile(rf"(?<![\w.]){_NUM}\s*[x×\*]\s*{_NUM}\s*{_UNIT}\b", re.IGNORECASE)            # 24x330ml, 2 x 12.5kg
+MULTI_RE = re.compile(rf"(?<![\w.]){_NUM}\s*[xÃ—\*]\s*{_NUM}\s*{_UNIT}\b", re.IGNORECASE)            # 24x330ml, 2 x 12.5kg
 SINGLE_RE = re.compile(rf"(?<![\w.]){_NUM}\s*{_UNIT}\b", re.IGNORECASE)                            # 750ml, 5 kg
 COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*(?:'s|s\b|\s*(?:pcs|pc|pieces|units|each|ea|slices|sheets|portions|sachets"
                       r"|sticks|capsules|pods|per\s+(?:case|pack|box)))", re.IGNORECASE)  # 12's, 24 pcs, 40 Slices
-X_COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*[x×]\s*(?=[a-z])", re.IGNORECASE)                    # 6 x A10 (count known, contents not)
+X_COUNT_RE = re.compile(r"(?<![\w.])(\d+)\s*[xÃ—]\s*(?=[a-z])", re.IGNORECASE)                    # 6 x A10 (count known, contents not)
 
 
 def _f(s: str) -> float:

@@ -43,6 +43,9 @@ def _refuse(kind: Refusal, reason: str) -> Conversion:
 
 def _by_history(line: Line, options: list[float], median_price: float | None, what: str) -> Conversion:
     """Pick the one factor whose implied base-unit price is plausible against the item's history."""
+    options = list(dict.fromkeys(options))
+    if len(options) == 1:
+        return Conversion(options[0], "fixed_pack", reason=f"{what}: both readings give the same stock quantity")
     if median_price and line.unit_price:
         plausible = [f for f in options
                      if 1 / PRICE_BAND <= (line.unit_price / f) / median_price <= PRICE_BAND]
@@ -71,6 +74,8 @@ def convert(line: Line, item: StockItem, median_price: float | None = None) -> C
 
     # --- stock held by mass, volume or length -------------------------------------------------
     if base.dimension != COUNT:
+        if column and column[0] not in (COUNT, base.dimension):
+            return _refuse(Refusal.UNIT_CONFLICT, f"invoiced in {line.unit} but held in {base.unit}")
         pack_fits = pack is not None and pack.amount is not None and pack.dimension == base.dimension
         # A pack printed in another dimension ("Honey 5 kg tub" beside a "Litre" column, held in litres) is
         # contradictory evidence: the column must not override it. It falls through to the unit conflict below.
@@ -79,12 +84,12 @@ def convert(line: Line, item: StockItem, median_price: float | None = None) -> C
         # jugs: the column names what the jug holds. A weighed quantity (1.254 of "Beef Bone Marrow (1 KG)")
         # is already in the column's unit and the pack size is only the nominal size.
         if column and column[0] == base.dimension and not pack_conflicts and (fractional or not pack_fits):
-            return Conversion(column[1], "variable_weight" if fractional else "same_unit",
+            return Conversion(column[1] / base.scale, "variable_weight" if fractional else "same_unit",
                               reason=f"invoiced in {line.unit}, held in {base.unit}")
         if pack and pack.amount is not None:
             if pack.dimension == base.dimension:
-                return Conversion(pack.total, "fixed_pack",
-                                  reason=f"'{pack.raw}' is {pack.total:g} {base.unit} per invoiced unit")
+                return Conversion(pack.total / base.scale, "fixed_pack",
+                                  reason=f"'{pack.raw}' is {pack.total / base.scale:g} {base.unit} per invoiced unit")
             return _refuse(Refusal.UNIT_CONFLICT,
                            f"invoiced as '{pack.raw}' ({pack.dimension}) but held in {base.unit} ({base.dimension}); "
                            "converting needs a density that is not recorded anywhere")
@@ -97,28 +102,49 @@ def convert(line: Line, item: StockItem, median_price: float | None = None) -> C
 
     # --- stock counted, each unit holding a fixed amount (a 750ML bottle) ----------------------
     if base.content is not None:
+        if line.unit and column is None:
+            return _refuse(Refusal.PACK_NOTATION_ABSENT,
+                           f"the invoice unit '{line.unit}' does not state how many {base.raw} units it holds")
+        if column and column[0] not in (COUNT, base.content_dimension):
+            return _refuse(Refusal.UNIT_CONFLICT,
+                           f"invoiced in {line.unit} but each stock unit holds {base.raw}")
         if pack and pack.amount is not None:
             if pack.dimension == base.content_dimension and abs(pack.amount - base.content) <= CONTENT_TOLERANCE * base.content:
+                if column and column[0] == COUNT and column[1] != 1.0 and column[1] != pack.count:
+                    return _refuse(Refusal.UNIT_CONFLICT,
+                                   f"{line.unit} conflicts with the count in '{pack.raw}'")
                 return Conversion(pack.count, "fixed_pack",
                                   reason=f"'{pack.raw}' is {pack.count:g} x {base.raw} per invoiced unit")
             return _refuse(Refusal.UNIT_CONFLICT,
                            f"invoiced as '{pack.raw}' but the stock item is counted in units of {base.raw}: "
                            "a different size, not the same product")
+        if column and column[0] == base.content_dimension:
+            return Conversion(column[1] / base.content, "same_unit",
+                              reason=f"invoiced in {line.unit}, counted in {base.raw} units")
+        if column and column[0] == COUNT and not (pack and pack.container):
+            return Conversion(column[1], "same_unit", reason=f"{line.unit} is {column[1]:g} stock units")
         if pack and pack.container:
             return _refuse(Refusal.PACK_NOTATION_ABSENT,
                            f"invoiced per {pack.container} without stating how many {base.raw} units it holds")
+        if pack and pack.count > 1:
+            return Conversion(pack.count, "fixed_pack", reason=f"'{pack.raw}' states the number of stock units")
         return Conversion(1.0, "same_unit", reason=f"one invoiced unit is one {base.raw} unit")
 
     # --- stock counted, plain EACH -----------------------------------------------------------
     if column and column[0] != COUNT:
         return _refuse(Refusal.UNIT_CONFLICT, f"invoiced in {line.unit} but the stock item is counted (EACH)")
     if pack and pack.count > 1:
-        return _by_history(line, [1.0, pack.count], median_price, f"'{pack.raw}' on an item counted EACH")
+        return _by_history(line, [1.0, pack.count / base.scale], median_price,
+                           f"'{pack.raw}' on an item counted in {base.unit}")
     if pack and pack.container and pack.amount is None:
         # A plausible price does not tell us the box holds one: history can only choose between factors the
         # invoice offers, and here it offers none, so the contents stay unknown (decided by the user, 2026-09-15)
         return _refuse(Refusal.PACK_NOTATION_ABSENT,
                        f"invoiced per {pack.container}; its contents are not printed and the stock item is counted EACH")
-    if column and column[1] != 1.0:
-        return Conversion(column[1], "same_unit", reason=f"{line.unit} is {column[1]:g} each")
+    if column:
+        return Conversion(column[1] / base.scale, "same_unit",
+                          reason=f"invoiced in {line.unit}, held in {base.unit}")
+    if base.scale != 1.0:
+        return _refuse(Refusal.PACK_NOTATION_ABSENT,
+                       f"held in {base.unit} but the invoice does not state its count unit")
     return Conversion(1.0, "same_unit", reason="counted in the same units as invoiced")

@@ -81,6 +81,35 @@ def test_a_different_bottle_size_is_not_the_same_product():
     assert convert(L("La Machina Watermelon 1L", 1), BY["1"]).refusal == Refusal.UNIT_CONFLICT.value
 
 
+@pytest.mark.parametrize("description", ["La Machina Watermelon", "La Machina Watermelon 750ml"])
+def test_bottle_rejects_a_conflicting_mass_column(description):
+    assert convert(L(description, 2, "KG"), BY["1"]).refusal == Refusal.UNIT_CONFLICT.value
+
+
+def test_bottle_converts_explicit_volume_and_count_units():
+    assert convert(L("La Machina Watermelon", 1.5, "Litre"), BY["1"]).factor == pytest.approx(1 / 0.75)
+    assert convert(L("La Machina Watermelon", 2, "dozen"), BY["1"]).factor == 12
+    assert convert(L("La Machina Watermelon 6x750ml", 2, "dozen"), BY["1"]).refusal == Refusal.UNIT_CONFLICT.value
+    assert convert(L("La Machina Watermelon", 2, "PKT"), BY["1"]).refusal == Refusal.PACK_NOTATION_ABSENT.value
+
+
+@pytest.mark.parametrize("name,description,quantity,unit,factor,target", [
+    ("rump (GRAM)", "Rump", 10, "KG", 1000, "g"),
+    ("rump (GRAM)", "Rump 500g", 2, None, 500, "g"),
+    ("syrup (ML)", "Syrup", 2, "Litre", 1000, "ml"),
+    ("eggs (DOZEN)", "Eggs", 24, "EACH", 1 / 12, "dozen"),
+])
+def test_conversion_preserves_the_actual_pilot_unit(name, description, quantity, unit, factor, target):
+    stock_item = item("99", name)
+    assert stock_item.base.unit == target
+    c = convert(L(description, quantity, unit), stock_item)
+    assert c.ok and c.factor == pytest.approx(factor)
+    matcher = Matcher(StockFile("test", None, [stock_item]))
+    result = normalise_line(L(description, quantity, unit), None, matcher, {})
+    assert result.converted and result.base_unit == target
+    assert result.base_quantity == pytest.approx(round(quantity * factor, 4))
+
+
 def test_pack_count_resolved_by_price_history():
     c = convert(L("Napkin NC Bar (2000's)", 1, None, 900.0), BY["9"], median_price=0.45)
     assert (c.factor, c.basis) == (2000.0, "history")

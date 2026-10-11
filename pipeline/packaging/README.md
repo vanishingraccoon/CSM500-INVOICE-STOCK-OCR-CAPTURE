@@ -27,10 +27,12 @@ From the workspace, on Windows with the .NET Framework 64-bit C# compiler:
 invoice-pipeline\.venv\Scripts\python.exe invoice-pipeline\packaging\build_installer.py --output output/eastgate-installer
 ```
 
-The build uses explicit source folders and four baseline files. `build-manifest.json` records payload and EXE hashes. The installer verifies extracted payload hashes before seeding data. Source formatting follows MAIN: four-space indentation, UTF-8, LF for Python/Markdown and CRLF for PowerShell.
+The build uses explicit source folders and four baseline files. `build-manifest.json` records payload and EXE hashes. The installer verifies extracted payload hashes before seeding data. Source formatting uses four-space indentation, UTF-8, LF for Python/Markdown and CRLF for PowerShell.
 
 ## Verification limits
 
 On 11 October 2026 the operator reported that the PC application works through v7 (assembly 1.0.6). This is an operator report, not a complete independent deployment certification or an invoice-accuracy result. Field review has identified unresolved parsing and quantity issues; invoice outputs still require careful checking.
 
 The automated installer tests use controlled downloads and native stage outcomes. They cover restart-required handling, first installation, missing runtime files, repeated attempts, damaged source and environments, and preserving existing state. They do not replace physical Windows, GUI or phone testing. Preparation and payload checks preserve test data, while retained old folders consume disk space. No memory or throughput improvement has been measured.
+
+The current source includes PDF upload and a scanned-page quality profile. Physical trial results remain separate from unit tests and controlled installer replays. The private installer build requires the external baseline files named by the build script; these are not distributed in this repository.

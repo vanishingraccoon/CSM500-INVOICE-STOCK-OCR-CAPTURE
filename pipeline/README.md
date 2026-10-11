@@ -1,7 +1,7 @@
 # Invoice capture and unit-of-measure conversion for point-of-sale stock entry
 
 
-The system reads photographed supplier invoices and matches each line to a Pilot POS stock item. It converts the quantity into that item's base unit, or refuses and says why. It flags likely keying errors, and a person reviews every line before exporting rows to key into Pilot. Nothing is written to Pilot automatically.
+The system reads photographed or scanned supplier invoices and matches each line to a Pilot POS stock item. It converts the quantity into that item's base unit, or refuses and says why. It flags likely keying errors, and a person reviews every line before exporting rows to key into Pilot. Nothing is written to Pilot automatically.
 
 ## Environments
 
@@ -14,7 +14,7 @@ Tesseract is expected at `C:\Program Files\Tesseract-OCR\tesseract.exe`; set `TE
 
 ## Data
 
-The data is confidential: negotiated supplier prices and a trading business's stock records. It never leaves this machine and is not committed anywhere.
+The data is confidential: negotiated supplier prices and a trading business's stock records. Raw invoices, stock exports and trial databases are kept outside this repository and shared only for authorised testing.
 
 | Folder | Holds |
 |---|---|
@@ -37,7 +37,7 @@ The data is confidential: negotiated supplier prices and a trading business's st
 .venv/Scripts/python -m pytest              # tests
 ```
 
-Every figure for the results chapter is in `data/out/results/results.md`, with the underlying numbers in `metrics.json` and `hwr_trial.json`.
+Historical evaluation outputs are generated locally in `data/out/results/results.md`, with the underlying numbers in `metrics.json` and `hwr_trial.json`.
 
 ## Laptop server and portal
 
@@ -113,7 +113,7 @@ Anyone who can reach it can see the invoice photographs.
 |---|---|
 | `ingest/` | Extracts page images, identifies supplier, document number and date, and groups pages into invoices on positive evidence only. |
 | `ocr/` | PaddleOCR and Tesseract behind one interface returning word boxes, with a disk cache and a parallel runner. |
-| `parser/` | One table engine. Supplier layouts are data (`layouts.py`), not code. It reconciles quantity Ãƒ— price against the line total, and records rather than corrects invoices that do not add up. |
+| `parser/` | One table engine. Supplier layouts are data (`layouts.py`), not code. It reconciles quantity Ãƒâ€” price against the line total, and records rather than corrects invoices that do not add up. |
 | `normaliser/` | Reads base units out of Pilot item names, scores stock-item matches (alias, supplier history, text), and converts or refuses with a category and a reason. |
 | `checks/` | Duplicate invoices, and price anomalies against each item's median, classified (unit error, case keyed as units, transposed, placeholder item). |
 | `tools/` | Loads Pilot exports, and ties scanned invoices to Pilot entries by reference, falling back to total and date. |
@@ -148,17 +148,33 @@ Also reviewed and cited as related work rather than used:
 - **Table Transformer:** deep-learning table detection.
 - **quantulum3** and **ingredient-parser:** extracting quantities and units from text.
 
-## Windows launcher and a clean Eastgate trial
+## Windows setup and operation
 
-Install Python 3.12 with Tcl/Tk and the Python launcher. Copy the source folders to the independent laptop; create its environment there rather than copying `.venv`. Run `setup.ps1` once. It installs the core requirements and the pinned PaddleOCR/Paddle versions in `requirements-ocr.txt`. First OCR startup needs internet to download the named models; later startups use the model cache. A successful dependency install is not a completed invoice trial.
+### Upload scanned PDFs
+
+Open the portal's Batches page, choose News Cafe Eastgate, select **Upload scanned PDF**, and choose a PDF saved on the laptop. Each upload makes a new batch; one PDF page becomes one queued image, in original order. The existing background readers, invoice grouping, conversion key and quality checks process these pages. A multi-page invoice still depends on correctly recognised invoice headers; uploading a PDF does not repair grouping or extraction errors.
+
+PDFs may contain 1–100 pages and must be smaller than 30 MB without password protection. Pages are rendered at up to 300 DPI, limited to 4,500 pixels on the longest side; the original PDF is retained as `photos/<batch_id>/source.pdf`. All pages are prepared before the batch and its jobs are committed, so a refused import does not create a partial batch. Rendering happens during upload; OCR follows in the background. Keep the launcher running and wait for the batch to finish reading.
+
+Review the results, then use **Create input report** on the batch page for PDF/CSV output. This web action refuses unread, failed or unattached pages. Corrections and retakes are still included as flagged results; creating a report does not certify accuracy. Existing phone correction screens can access the shop's uploaded batches; the portal's batch page displays results. No phone pairing is required just to upload PDFs and create reports.
+
+PDF quality uses the 99th-minus-1st luminance percentile to measure sparse ink against paper. White paper is not assessed using the camera's whole-page washed-out/glare thresholds. Blur, dark images, low ink contrast and too few recognised words still fail; this is a heuristic and cannot detect every locally hidden row. Camera captures and phone retakes keep their existing quality checks. After upgrading, a completed, unsubmitted PDF batch can use **Recheck PDF quality** to update its quality flags without uploading again or rerunning OCR. The action logs before/after quality and rebuilds classifications; it preserves edits, images and OCR results. Submitted report snapshots are left unchanged.
+
+Repeated uploads create separate batches and run the existing duplicate checks. For a fresh independent trial, preserve the earlier evidence, close the server, use Clean Run and restart before uploading; otherwise earlier learned aliases remain active. Record PDF upload/render time separately from phone capture time, and count photographed pages separately from grouped invoices. This path avoids rephotographing the printed test set but does not establish the same capture conditions as a phone trial.
+
+### Install and start the server
+
+For a source installation, install Python 3.12 with Tcl/Tk and the Python launcher. Copy the project folders to the laptop and create a new Python environment there. Run `setup.ps1` once. It installs the core requirements and the pinned PaddleOCR/Paddle versions in `requirements-ocr.txt`. First OCR startup needs internet to download the named models; later startups use the model cache. A successful dependency install is not a completed invoice trial.
 
 Double-click `Launch Invoice Server.cmd` or run `launch.ps1`. The desktop window starts the portal/API and readers together, opens the browser after the readers load, and provides Stop, Start, Open portal and Open log. Close the window to stop its server and readers. Stop then Start restarts them. Logs are under the selected app-data folder in `logs/server.log`. If the chosen port is occupied, choose another; the launcher does not stop the other program.
 
 The server listens on the laptop's local network. Pair from `/pair` using the laptop's Wi-Fi address shown there; the laptop browser uses `127.0.0.1`. The phone and laptop must share the office network, and Windows must permit the server on that private network. This launcher does not change firewall rules. Do not close the laptop lid or allow it to sleep during processing.
 
-An isolated case-study run can set `INVOICE_DATA` to a folder containing `pilot/`, and `INVOICE_APP_DATA` to a new app folder. Put `shops.json` in that app folder with only Eastgate and exact baseline export filenames. Keep the trial-week reference report outside `pilot/`. No previous database, device pairing or learned aliases should be copied into the baseline run.
+### Start an independent evaluation run
 
-`INVOICE_SUPPLIERS_FILE` optionally points to a JSON list of additional supplier identities (`key`, `pilot_name`, `aliases`, optional `goods`). Empty aliases mean manual supplier identification; they do not teach OCR to recognise the supplier. Duplicate identities and empty aliases are rejected. Set this variable before starting the launcher so the server and readers load the same registry.
+Preserve the previous run before preparing a new baseline. An isolated run can set `INVOICE_DATA` to a folder containing `pilot/`, and `INVOICE_APP_DATA` to a new app folder. Put `shops.json` in that app folder with only Eastgate and exact baseline export filenames. Keep the trial-week reference report outside `pilot/`. No previous database, device pairing or learned aliases should be copied into the baseline run.
+
+`INVOICE_SUPPLIERS_FILE` optionally points to a JSON list of additional supplier identities (`key`, `pilot_name`, `aliases`, optional `goods`). Empty aliases mean manual supplier identification; they do not teach OCR to recognise the supplier. Duplicate identities and blank strings within the alias list are rejected; an empty list is allowed. Set this variable before starting the launcher so the server and readers load the same registry.
 
 A shop's optional `history_days` limits Pilot prices to that many days ending at the latest date in its selected purchase export. Supplier/product matching still uses the full export. The Eastgate trial preparation uses 90 days. Broad supplier history is not permission to infer missing pack sizes.
 

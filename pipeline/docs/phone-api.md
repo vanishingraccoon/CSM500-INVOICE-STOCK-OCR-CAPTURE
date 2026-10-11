@@ -1,7 +1,7 @@
 # Phone ⇄ laptop server contract (v1)
 
-The single source of truth for the Android app (`../invoice-app-android`) and the laptop server/portal
-(`invoice-pipeline/app`). Both sides implement exactly this. Change it here first, then in both.
+The single source of truth for the Android app (`../../android`) and the laptop server/portal
+(`pipeline/app`). Both sides implement exactly this. Change it here first, then in both.
 
 Settled with the user on 2026-09-15 (see the design summary in the session): native Android app, Google
 ML Kit Document Scanner (basic mode, no image cleaning, one scanner session per batch), photos read in a

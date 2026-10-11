@@ -2,10 +2,10 @@
 
 The phone half of the invoice pipeline. A store manager photographs a supplier delivery's
 invoices with the phone; the photos upload over the office Wi-Fi to the always-on store laptop
-(`../invoice-pipeline`), which reads them. The manager then checks the results on the phone, fixes
+(`../pipeline`), which reads them. The manager then checks the results on the phone, fixes
 what the laptop could not read, and submits the batch; the laptop produces the input report (PDF + CSV).
 
-The phone and the laptop follow one contract: `../invoice-pipeline/docs/phone-api.md` (v1).
+The phone and the laptop follow one contract: `../pipeline/docs/phone-api.md` (v1).
 
 ## What the app does
 
@@ -15,7 +15,11 @@ The phone and the laptop follow one contract: `../invoice-pipeline/docs/phone-ap
 - **Home** – batches for this shop (`GET /api/v1/batches`), the upload queue on this phone, a large
   **Scan invoices** button and **Settings** (laptop address, device name, check connection, unpair).
 - **Capture** – one Google ML Kit Document Scanner session is one batch (basic mode, photos kept as
-  taken, JPEG, no gallery import, up to 100 pages). For each page, in scan order, the app runs the §6
+  taken, JPEG, no gallery import, up to 100 pages). If that scanner cannot open, the app offers the
+  phone's camera instead. Photograph one page, use **Add page** for the rest and **Done** to upload
+  them as one batch. Camera mode keeps the full photograph without automatic cropping; keep the
+  whole invoice in view and avoid shadows. A retake returns one photograph directly. For each page,
+  in capture order, the app runs the §6
   quality checks (blur, too dark / washed out, faint print, glare) on an 800 px grayscale copy, makes the
   upload copy (orientation applied, 3000 px long side, JPEG quality 90), stores it in app-private
   storage, hashes it (SHA-256) and queues a WorkManager upload (`PUT …/photos/{client_photo_key}` with
@@ -90,7 +94,7 @@ the capture summary, and discarding a stuck page from the pending store.
 
 ## Open in Android Studio
 
-**File → Open…** and choose this `invoice-app-android` folder (not the parent). Let the Gradle sync
+**File → Open…** and choose this `android` folder (not the parent). Let the Gradle sync
 finish. If Studio asks for a Gradle JDK, pick JDK 21 (**Settings → Build, Execution, Deployment → Build
 Tools → Gradle → Gradle JDK**). Run the `app` configuration on a connected phone.
 
@@ -109,8 +113,11 @@ Tools → Gradle → Gradle JDK**). Run the `app` configuration on a connected p
 
    (With `platform-tools` on the PATH this is simply `adb install -r app\build\outputs\apk\debug\app-debug.apk`.)
 
-The phone needs Google Play services: the document scanner and the QR scanner are downloaded by Play
-services the first time they are used, so open the app once on Wi-Fi with internet access.
+Google Play services downloads the document and QR scanner features on first use. If the document
+scanner is unavailable, camera capture works through the phone's installed Camera app without that
+feature. If QR scanning is unavailable, type the laptop address and pairing code instead. The app
+still requires Android 10 or newer. Install version 0.1.1 (versionCode 2) over the existing app to keep
+its pairing and pending uploads; do not uninstall or clear app data merely to update it.
 
 ## Release signing
 
@@ -210,8 +217,10 @@ in Settings and use a new code; revoke old phones on the portal's **Devices** pa
 
 ## Known gaps
 
-- Not yet run on a phone or emulator: this laptop has no system image and no phone was connected, so the
-  scanner flow, uploads against the real server and the screens are only compiled and unit-tested.
+- The user reported that the document scanner could not start on a Samsung Note20 with Android 13
+  because the feature was unavailable in its Google Play services version. Version 0.1.1 adds a camera
+  fallback. Successful physical camera capture, rotation/cancellation, multi-page and retake uploads
+  still need checking on that phone; local verification compiles the UI and unit-tests callback routing.
 - The contract has no supplier list, so **Edit** asks for the supplier key the laptop knows (for example
   `vassco`); everywhere else the supplier is shown by its Pilot name (`supplier_name`, "Vassco").
 - Quality thresholds are the contract's starting values and still need calibrating on real photos.
@@ -230,7 +239,9 @@ in Settings and use a new code; revoke old phones on the portal's **Devices** pa
   turned off, so the token, invoice photos and prices are not copied off the phone. The token is added only
   to requests for the paired laptop's scheme, host and port (including image loading).
 - Invoice photos wait for upload in app-private storage (not the shared gallery or cache) and are deleted
-  as soon as the laptop's receipt matches. The app needs no camera or storage permission: the Google
-  scanners run their own camera screens.
+  as soon as the laptop's receipt matches. The app needs no camera or storage permission: capture uses
+  the Google scanner or the phone's camera app. Camera mode grants access to its temporary file using
+  a non-exported FileProvider restricted to the camera cache folder. Photos are copied into the pending
+  queue before upload; temporary captures are removed after that copy or when capture is cancelled.
 - Anyone on the office Wi-Fi could read cleartext traffic; keep that network for store devices only, and
   revoke a lost phone on the portal's **Devices** page.

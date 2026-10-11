@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Industry design system: ground and accent. Compose colours live in ui/theme/Color.kt. -->
+    <!-- Industry design system: ground and accent. Compose colours live in ui/theme/Theme.kt. -->
     <color name="ground">#FFF2F2F3</color>
     <color name="ic_launcher_background">#FF5980A6</color>
 </resources>

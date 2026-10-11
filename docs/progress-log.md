@@ -33,3 +33,11 @@ Short dated summaries of completed project work and the decisions that affected 
 - The operator confirmed the PC app works through installer v7. Field review has found unresolved invoice parsing and quantity issues; installation success does not establish output accuracy or a completed phone-to-export trial.
 - Published the locally developed fixes with their tests. The release replay passed 289 Python tests, including controlled Windows installer scenarios; those scenarios do not replace clean-machine testing.
 - Clarified repository publication history and excluded local data and generated files from routine Git additions.
+
+## 12 October 2026 — final integration
+
+- Published field-driven parsing, quantity and zero-price fixes with regression tests.
+- Added PDF import and scanned-page quality rechecks, camera fallback and an archive-first trial reset tool.
+- Updated setup instructions and documented the remaining report-guard and network-access limitations.
+- The final Python replay passed 331 tests. Android build and unit tests passed; automated checks do not establish independent invoice accuracy.
+- Preserved the original trial evidence separately. The 15-invoice PDF trial recorded Retake results; the quality recheck on a copy is diagnostic, not a new trial.

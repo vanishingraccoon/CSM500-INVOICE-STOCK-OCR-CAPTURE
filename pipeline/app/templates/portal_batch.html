@@ -30,6 +30,19 @@
       <span class="muted">{% if older %}{{ older|length }} earlier version{{ "" if older|length == 1 else "s" }} kept (version{{ "" if older|length == 1 else "s" }} {{ older|map(attribute='version')|join(', ') }}); the printed copies still match them.{% else %}A rebuild issues version 2 and keeps this one's file.{% endif %}</span>
     </div>
   {% endif %}
+  {% if b.status != "submitted" %}
+    <p class="muted">Check the invoice results before creating the input report. Corrections and retakes remain flagged in the report.</p>
+    <form method="post" action="{{ url_for('portal.submit_batch', batch_id=b.batch_id) }}"
+          onsubmit="return confirm('Create the input report from these results? Review corrections and retakes first.')">
+      <button class="btn btn-primary" type="submit" {% if b.progress.waiting or b.progress.reading or b.progress.failed or loose or not b.progress.photos %}disabled{% endif %}>Create input report</button>
+    </form>
+  {% endif %}
+  {% if pdf_import and b.status == "ready" %}
+    <p class="muted">PDF pages use ink contrast checks so white paper is not counted as camera glare. If this batch was processed with an older version, recheck its quality without repeating OCR.</p>
+    <form method="post" action="{{ url_for('portal.recheck_pdf_quality', batch_id=b.batch_id) }}">
+      <button class="btn btn-secondary" type="submit">Recheck PDF quality</button>
+    </form>
+  {% endif %}
   {% if retaken %}
     <p class="bad" style="margin:var(--space-2) 0 0">{{ retaken|length }} invoice{{ "" if retaken|length == 1 else "s" }} changed after this batch's report (a retake or an edit); rebuild the report to take {{ "it" if retaken|length == 1 else "them" }} in now, or {{ "it joins" if retaken|length == 1 else "they join" }} the next report this shop submits.</p>
   {% endif %}

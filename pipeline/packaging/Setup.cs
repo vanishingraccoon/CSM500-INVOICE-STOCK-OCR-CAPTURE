@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("Eastgate Invoice Server Setup")]
-[assembly: AssemblyVersion("1.0.6.0")]
+[assembly: AssemblyVersion("1.0.11.0")]
 
 class Setup : Form
 {
@@ -32,7 +32,7 @@ class Setup : Form
 
     Setup()
     {
-        Text = "Eastgate Invoice Server Setup (1.0.6)";
+        Text = "Eastgate Invoice Server Setup (1.0.7)";
         ClientSize = new Size(620, 400);
         Font = new Font("Segoe UI", 10);
         FormBorderStyle = FormBorderStyle.FixedDialog;

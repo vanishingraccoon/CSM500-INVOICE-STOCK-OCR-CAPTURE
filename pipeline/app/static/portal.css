@@ -42,6 +42,13 @@ h3 { font-size: 18px; margin: 0 0 var(--space-1); }
 .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .actions-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
 form.inline { display: inline; margin: 0; }
+.pdf-upload-form { display: grid; grid-template-columns: minmax(120px, auto) minmax(0, 1fr); gap: var(--space-3);
+                   align-items: center; max-width: 760px; }
+.pdf-upload-form .btn { grid-column: 2; justify-self: start; }
+@media (max-width: 600px) {
+  .pdf-upload-form { grid-template-columns: minmax(0, 1fr); }
+  .pdf-upload-form .btn { grid-column: 1; }
+}
 
 /* batch page: tabs as sections, Corrections in red */
 .tab-jump { display: flex; flex-wrap: wrap; gap: var(--space-2); }

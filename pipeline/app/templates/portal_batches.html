@@ -3,14 +3,30 @@
 {% block body %}
 <div class="page-head">
   <h1>Batches</h1>
-  <span class="muted">One batch is one scanner session on a phone. Newest first; photographs are read in the background.</span>
+  <span class="muted">Each phone session or PDF upload creates a batch. Newest first; pages are read in the background.</span>
 </div>
+
+<section class="plate">
+  <h2>Upload scanned PDF</h2>
+  <p class="muted">Choose a PDF saved on this laptop. Pages stay in order and follow the same invoice checks as phone captures. Up to 100 pages and 30 MB; password-protected PDFs are not supported.</p>
+  {% if upload_error %}<p class="bad" role="alert">{{ upload_error }}</p>{% endif %}
+  <form class="pdf-upload-form" method="post" action="{{ url_for('portal.upload_pdf') }}" enctype="multipart/form-data"
+        onsubmit="this.querySelector('button').disabled = true; this.querySelector('button').textContent = 'Uploading and preparing pages…';">
+    <label for="pdf-shop">Shop</label>
+    <select class="input" id="pdf-shop" name="shop_id" required>
+      {% for g in groups %}<option value="{{ g.shop.shop_id }}">{{ g.shop.name }}</option>{% endfor %}
+    </select>
+    <label for="invoice-pdf">Scanned invoices</label>
+    <input class="input" id="invoice-pdf" type="file" name="pdf" accept="application/pdf,.pdf" required>
+    <button class="btn btn-primary" type="submit">Upload PDF</button>
+  </form>
+</section>
 
 {% for g in groups %}
 <section>
   <h2>{{ g.shop.name }}</h2>
   {% if not g.batches %}
-    <p class="muted">No batches yet. <a href="{{ url_for('portal.pair', shop=g.shop.shop_id) }}">Pair a phone</a>, then scan a batch of invoices with it.</p>
+    <p class="muted">No batches yet. Upload a PDF above or <a href="{{ url_for('portal.pair', shop=g.shop.shop_id) }}">pair a phone</a> to scan invoices.</p>
   {% else %}
   <div class="table-wrap">
     <table class="table">
@@ -25,7 +41,7 @@
       {% for b in g.batches %}
         <tr>
           <td><a href="{{ url_for('portal.batch', batch_id=b.batch_id) }}">{{ b.created_at|when }}</a></td>
-          <td>{{ b.device_name or "" }}</td>
+          <td>{{ "" if b.device_name == "PDF upload" else (b.device_name or "") }}</td>
           <td><span class="tag {{ 'tag-accent' if b.status == 'submitted' else 'tag-outline' }}">{{ b.status }}</span></td>
           <td class="num">{{ b.progress.photos }}</td>
           <td>

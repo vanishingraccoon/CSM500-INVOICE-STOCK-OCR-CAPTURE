@@ -18,7 +18,7 @@ from flask import (
     url_for,
 )
 
-from app import batches, context, db, pairing, reading, report, shops
+from app import batches, context, db, pairing, pdf_upload, reading, report, shops
 from app.api import send_photo
 from app.batches import ApiError
 from app.reading import invoice_title
@@ -73,6 +73,56 @@ def index():
     return render_template("portal_batches.html", groups=groups, active="batches")
 
 
+@portal.post("/upload-pdf")
+def upload_pdf():
+    conn = context.connection()
+    shop_id = request.form.get("shop_id", "")
+    error, status = None, 400
+    if shop_id not in _shop_list():
+        error = "Choose a configured shop."
+    elif "pdf" not in request.files or not request.files["pdf"].filename:
+        error = "Choose a scanned PDF to upload."
+    else:
+        uploaded = request.files["pdf"]
+        try:
+            batch_id = pdf_upload.import_pdf(conn, context.settings(), shop_id, uploaded.stream, uploaded.filename)
+            return redirect(url_for("portal.batch", batch_id=batch_id), code=303)
+        except ApiError as exc:
+            error, status = exc.message, exc.status
+    groups = [{"shop": s, "batches": batches.summaries(conn, s.shop_id)} for s in _shop_list().values()]
+    return render_template("portal_batches.html", groups=groups, active="batches", upload_error=error), status
+
+
+@portal.post("/batches/<batch_id>/submit")
+def submit_batch(batch_id: str):
+    conn = context.connection()
+    row = db.one(conn, "SELECT * FROM batches WHERE batch_id = ?", batch_id)
+    if row is None:
+        abort(404)
+    # The web uploader has no phone Submit button; refuse a report with omitted pages.
+    if conn.execute("SELECT COUNT(*) FROM photos p WHERE p.batch_id = ? AND p.state <> 'replaced'"
+                    " AND (p.state <> 'read' OR NOT EXISTS"
+                    " (SELECT 1 FROM invoice_pages ip WHERE ip.photo_id = p.photo_id))", (batch_id,)).fetchone()[0]:
+        abort(409, "Some pages are still being read, failed, or are not attached to an invoice. Check the batch before creating a report.")
+    if not conn.execute("SELECT COUNT(*) FROM photos WHERE batch_id = ?", (batch_id,)).fetchone()[0]:
+        abort(409, "Upload invoice pages before creating a report.")
+    device = db.one(conn, "SELECT * FROM devices WHERE device_id = ?", row["device_id"])
+    try:
+        report.submit(conn, context.keys(), context.settings(), device, batch_id)
+    except ApiError as exc:
+        abort(exc.status, exc.message)
+    return redirect(url_for("portal.batch", batch_id=batch_id), code=303)
+
+
+@portal.post("/batches/<batch_id>/recheck-pdf-quality")
+def recheck_pdf_quality(batch_id: str):
+    try:
+        pdf_upload.recheck_quality(context.connection(), context.settings(), context.keys(), batch_id)
+    except ApiError as exc:
+        abort(exc.status, exc.message)
+    return redirect(url_for("portal.batch", batch_id=batch_id), code=303)
+
+
 @portal.get("/batches/<batch_id>")
 def batch(batch_id: str):
     conn = context.connection()
@@ -89,7 +139,8 @@ def batch(batch_id: str):
         "portal_batch.html", b=data, by_tab={t: [i for i in data["invoices"] if i["tab"] == t] for t in TAB_ORDER},
         tabs=TAB_ORDER, titles=TAB_TITLES, loose=loose, device_name=device["name"] if device else "",
         shop_name=shop["name"] if shop else state.shop_id, report=reports[0] if reports else None, older=reports[1:],
-        retaken=[i for i in state.invoices.values() if i.needs_report], active="batches")
+        retaken=[i for i in state.invoices.values() if i.needs_report], active="batches",
+        pdf_import=db.one(conn, "SELECT 1 FROM events WHERE batch_id = ? AND kind = 'pdf_imported'", batch_id) is not None)
 
 
 @portal.post("/batches/<batch_id>/rebuild-report")

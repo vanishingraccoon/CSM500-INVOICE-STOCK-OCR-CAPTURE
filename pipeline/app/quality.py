@@ -1,7 +1,8 @@
 """Is a photograph good enough to read? Measured the same way on the phone and on the laptop.
 
-The phone checks first, so the manager can retake at once. The server repeats the checks, because it
-never trusts the phone alone, and adds what only recognition can tell: how many words were found.
+The phone checks first, so the manager can retake at once. The server repeats the checks and adds how
+many words were recognised. Server-rendered PDF pages use an ink contrast check: scanner paper is
+normally white, so whole-page brightness and blown-out pixel counts cannot distinguish paper from glare.
 
 Every measure is taken on a grayscale copy downscaled to 800 px on the long side, so a threshold means
 the same thing whatever resolution the phone photographed at. The thresholds are starting values in one
@@ -57,19 +58,24 @@ def glare_fraction(gray: np.ndarray, t: QualityThresholds = THRESHOLDS) -> float
     return float(per_block[glare_blocks].sum()) / (h * w)
 
 
-def measure(path: Path, t: QualityThresholds = THRESHOLDS) -> dict | None:
-    """The phone's four measures, taken here on the stored photograph; None if it cannot be decoded."""
+def measure(path: Path, t: QualityThresholds = THRESHOLDS, *, scanned_pdf: bool = False) -> dict | None:
+    """Keep camera measures; additionally measure sparse ink on server-rendered PDF pages."""
     import cv2
     gray = gray_downscaled(path, t.long_side)
     if gray is None:
         return None
     p5, p95 = np.percentile(gray, [5, 95])
-    return {
+    measured = {
         "sharpness": round(float(cv2.Laplacian(gray, cv2.CV_64F, ksize=1).var()), 1),
         "mean_luma": round(float(gray.mean()), 1),
         "contrast_spread": round(float(p95 - p5), 1),
         "glare_fraction": round(glare_fraction(gray, t), 4),
     }
+    if scanned_pdf:
+        # Five percent can contain only paper on sparse invoices; one percent still rejects isolated specks.
+        p1, p99 = np.percentile(gray, [1, 99])
+        measured.update(profile="scanned_pdf", ink_contrast_spread=round(float(p99 - p1), 1))
+    return measured
 
 
 def _number(value) -> float | None:
@@ -81,6 +87,7 @@ def _number(value) -> float | None:
 def problems(measures: dict | None, t: QualityThresholds = THRESHOLDS) -> dict[str, str]:
     """Problems by kind, in plain words, from whichever measures are present."""
     m = measures or {}
+    scanned_pdf = m.get("profile") == "scanned_pdf"
     out: dict[str, str] = {}
     s = _number(m.get("sharpness"))
     if s is not None and s < t.min_sharpness:
@@ -88,13 +95,13 @@ def problems(measures: dict | None, t: QualityThresholds = THRESHOLDS) -> dict[s
     luma = _number(m.get("mean_luma"))
     if luma is not None and luma < t.min_mean_luma:
         out["dark"] = f"photograph is too dark (brightness {luma:.0f}, needs at least {t.min_mean_luma:.0f})"
-    elif luma is not None and luma > t.max_mean_luma:
+    elif not scanned_pdf and luma is not None and luma > t.max_mean_luma:
         out["washed_out"] = f"photograph is washed out (brightness {luma:.0f}, needs at most {t.max_mean_luma:.0f})"
-    spread = _number(m.get("contrast_spread"))
+    spread = _number(m.get("ink_contrast_spread" if scanned_pdf else "contrast_spread"))
     if spread is not None and spread < t.min_contrast_spread:
         out["faint"] = f"print is too faint (contrast {spread:.0f}, needs {t.min_contrast_spread:.0f})"
     glare = _number(m.get("glare_fraction"))
-    if glare is not None and glare > t.max_glare_fraction:
+    if not scanned_pdf and glare is not None and glare > t.max_glare_fraction:
         out["glare"] = f"glare hides part of the page ({glare:.1%} of it, allowed {t.max_glare_fraction:.0%})"
     if m.get("cut_off") is True:
         out["cut_off"] = "the page is cut off"
@@ -105,7 +112,9 @@ def assess(server: dict | None, phone: dict | None, words: int | None = None,
            t: QualityThresholds = THRESHOLDS) -> dict:
     """{"ok", "problems"} for a page: the server's measures first, then anything only the phone saw."""
     found = problems(server, t)
-    for kind, text in problems(phone, t).items():
+    # A phone cannot select the PDF profile by submitting a quality field.
+    camera = {key: value for key, value in (phone or {}).items() if key != "profile"}
+    for kind, text in problems(camera, t).items():
         found.setdefault(kind, f"{text} on the phone's check")
     if words is not None and words < t.min_words:
         found["words"] = f"only {words} words recognised (needs {t.min_words})"

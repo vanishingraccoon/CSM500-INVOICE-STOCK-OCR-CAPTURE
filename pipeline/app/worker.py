@@ -24,7 +24,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from app import db, quality, reading
+from app import db, pdf_upload, quality, reading
 from app.settings import Settings, configure
 
 LEASE_SECONDS = 90.0
@@ -229,7 +229,7 @@ def process(conn: sqlite3.Connection, settings: Settings, keys, ocr, job: Job, o
     path = settings.photos / job.storage_path
     try:
         with LeaseKeeper(settings.db_path, job, owner):
-            measures = quality.measure(path)
+            measures = quality.measure(path, scanned_pdf=pdf_upload.is_pdf_page(conn, job.photo_id))
             if measures is None:
                 raise ValueError("the stored photograph could not be decoded")
             result = ocr.recognise(path)
